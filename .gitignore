@@ -3,3 +3,4 @@ auth.txt
 *.log
 *.json
 *.cpython-312
+*.pyc
