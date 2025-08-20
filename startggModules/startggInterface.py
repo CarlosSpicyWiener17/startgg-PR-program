@@ -39,7 +39,7 @@ class startggInterface:
     def addEvents(self, events):
         self.events.addEvents(events)
 
-    def _getAllTournaments(self,after,before):
+    def _getAllTournamentsQuery(self,after,before):
         """
         Gets all recent tournaments, within state, within selected timestamps, and returns them filtered
         """
@@ -112,10 +112,10 @@ class startggInterface:
             try:
                 user = response["data"]
             except:
-                raise DiscriminatorError
+                raise DiscriminatorError(discriminator)
             user = response["data"]["user"]
             if user is None:
-                raise DiscriminatorError
+                raise DiscriminatorError(discriminator)
             return {
                 "name" : user["player"]["gamerTag"],
                 "discriminator" : user["discriminator"],
@@ -169,14 +169,21 @@ class startggInterface:
             filledTournaments.append(tournament)
         return filledTournaments
 
-    def queryTournaments(self, start, end):
+    def getTournaments(self, start, end):
+        return self._queryTournaments(start, end)
+
+    def _queryTournaments(self, start, end):
+        """
+        Function getting processed, and processing un-processed tournaments, and returns in correct format
+        Start, End are timestamps
+        """
         #timestamps for tournament start times to search
         after, before = int(datetime.combine(start.get_date(), datetime.min.time()).timestamp()), int(datetime.combine(end.get_date(), datetime.min.time()).timestamp())
         
         #if there are gaps in previous searches, search all tournament ids within the specified timeframe
         tournamentsToProcess = []
         if not self.events.isWithinTime(after, before):
-            tournamentsToProcess = self._getAllTournaments(after, before)
+            tournamentsToProcess = self._getAllTournamentsQuery(after, before)
             #this time has now been checked
             self.events.addTime(after, before)
         
@@ -235,6 +242,8 @@ def tournamentTier(tournament, trackSet):
         else:
             eventTier = "None"
         tournament["eventTier"] = eventTier
+        if eventTier == "None":
+            tournament["counting"] = False
         return True, tournament
     except:
         logging.error(f"Unknown error with {tournament["name"]}", exc_info=True)

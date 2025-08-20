@@ -2,7 +2,7 @@ from tkinter import *
 from customtkinter import *
 import tkcalendar
 import threading
-from storage.tracklist import saveTracklist, getTracklist, removeTrackedPlayer
+from storage.tracklist import TrackedPlayers
 from storage.playerList import savePlayers
 from startggModules.startggInterface import startggInterface
 set_default_color_theme("green")
@@ -74,7 +74,7 @@ def fillTournamentsInfo(dateStart, dateEnd):
     try:
         loadingFrame.configure(text="Querying start.gg... Please wait")
         tournamentsInfo = []
-        tournamentsInfo = startgg.queryTournaments(dateStart, dateEnd)
+        tournamentsInfo = startgg.getTournaments(dateStart, dateEnd)
         updatedTournaments = True
         loadingFrame.configure(text="All tournaments loaded")
     finally:

@@ -229,7 +229,8 @@ def tournamentFilter(tournament : dict) -> tuple[bool, dict | None]:
                 "totalScore" : 0,
                 "eventTier" : "None",
                 "startAt" : tournamentStartAt,
-                "date" : toDate(tournamentStartAt)
+                "date" : toDate(tournamentStartAt),
+                "counting" : True
             }
         else:
             raise EventMissingError(tournamentLink, None)

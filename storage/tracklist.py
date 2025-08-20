@@ -1,47 +1,44 @@
-from pickle import load, dump
-import gzip
-import os
+from storage.database import Database
 
-script_dir = os.path.dirname(os.path.abspath(__file__))
-file_path = os.path.join(script_dir, "trackedPlayers.pkl")
+trackedPlayersStructure = {
+    "players" : (list, dict),
+    "playerDiscriminators" : (set, str)
+}
 
-if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
-    with gzip.open(file_path, "rb") as trackedPlayers:
-        tracklist = load(trackedPlayers)
-        trackedPlayers.close()       
-else:
-    tracklist = {
-                "players" : [],
-                "playerDiscriminators" : set()
-            }
+class TrackedPlayers(Database):
+    def __init__(self):
+        super().__init__("TrackedPlayers", trackedPlayersStructure)
+
+    def getTracklist(self):
+        return self._getItems("players")
     
-
-def getTracklist():
-    return tracklist["players"]
-
-def addTrackedPlayer(player : dict) -> None:
-    if player["discriminator"] in tracklist["playerDiscriminators"]:
-        return False
-    tracklist["players"].append(player)
-    tracklist["playerDiscriminators"].add(player["discriminator"])
-    print("adding", player["discriminator"])
-    return True
-
-def removeTrackedPlayer(startggDiscriminator) -> None:
-    exist = False
-    if startggDiscriminator in tracklist["playerDiscriminators"]:
-        exist = True
-    if exist:
-        tracklist["playerDiscriminators"].remove(startggDiscriminator)
-    for player in tracklist["players"]:
-        if player["discriminator"] == startggDiscriminator:
-            tracklist["players"].remove(player)
-            break
+    def addTrackedPlayer(self, newPlayer):
+        setOfDiscriminators = self._getItems("playerDiscriminators")
+        if newPlayer["discriminator"] in setOfDiscriminators:
+            for i, player in enumerate(self.activeDatabase["players"]):
+                try:
+                    if newPlayer["discriminator"] == player["discriminator"]:
+                        self.activeDatabase["players"][i] = newPlayer
+                        return 0
+                except:
+                    return -1
+        try:
+            self._add("players", newPlayer)
+            return 1
+        except:
+            return -1
         
-def getSetCheck() -> set:
-    return tracklist["playerDiscriminators"]
+    def removeTrackedPlayer(self, startggDiscriminator):
+        setOfDiscriminators = self._getItems("playerDiscriminators")
+        if startggDiscriminator in setOfDiscriminators:
+            self._removeDict("players", "discriminator", startggDiscriminator)
+        
+    def getSetCheck(self):
+        return self._getItems("playerDiscriminators")
+    
+    def loadTracklist(self):
+        self._load_db()
 
-def saveTracklist():
-    with gzip.open(file_path, "wb") as trackedPlayers:
-        dump(tracklist, trackedPlayers)
-        trackedPlayers.close()
+    def saveTracklist(self):
+        self._save_db()
+

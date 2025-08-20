@@ -46,11 +46,17 @@ class Event_db(Database):
         """
         self._updateItemKey("events", "id", tournamentId, "eventTier", newTier)
 
+    def toggleTournamentCounts(self, isCounting, tournamentId):
+        """
+        Changes counting key of tournament to isCounting of type bool
+        """
+        self._updateItemKey("events", "id", tournamentId, "counting", isCounting)
+
     def addEvents(self, eventsToAdd):
         """
         Add several tournaments to event database
         """
-        self._addMultiple("events", eventsToAdd)
+        self._updateMultipleDict("events", "id", eventsToAdd)
         self._addMultiple("eventIds", set([event["id"] for event in eventsToAdd]))
 
     def removeEvent(self, eventId):
@@ -79,7 +85,6 @@ class Event_db(Database):
                 end = max(end, e)
         if not placed:
             merged.append((start, end))
-        print(merged)
         self._overwrite("checkedDates", merged)
 
     def getSpecificEvent(self, id):
@@ -98,7 +103,6 @@ class Event_db(Database):
     
     def isWithinTime(self, after, before):
         for start, end in self._getItems("checkedDates"):
-            print(start, end)
             if start <= after and before <= end:
                 return True
         return False
