@@ -1,0 +1,4 @@
+*.pkl
+auth.txt
+*.log
+*.json
