@@ -1,6 +1,7 @@
-from systemInterface import *
+from App import App
 
 if __name__ == "__main__":
-    start()
+    app = App()
+    app.start()
     
     

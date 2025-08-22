@@ -1,29 +1,31 @@
 from storage.database import Database
 
 trackedPlayersStructure = {
-    "players" : (list, dict),
     "playerDiscriminators" : (set, str)
 }
 
+trackedPlayersName = "TrackedPlayers"
+
 class TrackedPlayers(Database):
     def __init__(self):
-        super().__init__("TrackedPlayers", trackedPlayersStructure)
+        super().__init__(trackedPlayersName, trackedPlayersStructure)
 
     def getTracklist(self):
-        return self._getItems("players")
+        return self._getItems("playerDiscriminators")
     
+    def isTracked(self, discriminator):
+        #Checks if this discriminator is stored
+        trackedPlayers = self.getTracklist()
+        if discriminator in trackedPlayers:
+            return True
+        return False
+
     def addTrackedPlayer(self, newPlayer):
         setOfDiscriminators = self._getItems("playerDiscriminators")
-        if newPlayer["discriminator"] in setOfDiscriminators:
-            for i, player in enumerate(self.activeDatabase["players"]):
-                try:
-                    if newPlayer["discriminator"] == player["discriminator"]:
-                        self.activeDatabase["players"][i] = newPlayer
-                        return 0
-                except:
-                    return -1
         try:
-            self._add("players", newPlayer)
+            if newPlayer["discriminator"] in setOfDiscriminators:
+                return 0
+            self._add("playerDiscriminators", newPlayer["discriminator"])
             return 1
         except:
             return -1
@@ -31,7 +33,7 @@ class TrackedPlayers(Database):
     def removeTrackedPlayer(self, startggDiscriminator):
         setOfDiscriminators = self._getItems("playerDiscriminators")
         if startggDiscriminator in setOfDiscriminators:
-            self._removeDict("players", "discriminator", startggDiscriminator)
+            self._remove("playerDiscriminators", startggDiscriminator)
         
     def getSetCheck(self):
         return self._getItems("playerDiscriminators")

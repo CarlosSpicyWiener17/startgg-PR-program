@@ -1,50 +1,103 @@
-from pickle import load, dump
-import gzip
-import os
+from storage.database import Database
 
-script_dir = os.path.dirname(os.path.abspath(__file__))
-file_path = os.path.join(script_dir, "allPlayers.pkl")
+playerTournamentsStructure = {
+    "entrantId" : (None, int),
+    "tournamentId" : (None, int),
+    "placement" : (None, int)
+}
 
-if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
-    with gzip.open(file_path, "rb") as trackedPlayers:
-        tracklist = load(trackedPlayers)
-        trackedPlayers.close()       
-else:
-    tracklist = {
-                "players" : [],
-                "playerDiscriminators" : set()
+playerStructure = {
+    "name" : (None, str),
+    "discriminator" : (None, str),
+    "link" : (None, str),
+    "tournaments" : (list, dict),
+    "setOfEntrantIds" : (set, int),
+    "userId" : (None, int)
+}
+
+allPlayersStructure = {
+    "players" : (list, dict),
+    "playerDiscriminators" : (set, str)
+}
+
+playerDatabaseName = "AllPlayers"
+
+class AllPlayers(Database):
+    def __init__(self):
+        super().__init__(playerDatabaseName, allPlayersStructure)
+
+    def _updatePlayer(self, newPlayer):
+        tournamentInfo = {
+            "entrantId" : newPlayer["entrantId"],
+            "tournamentId" : newPlayer["tournamentId"],
+            "placement" : newPlayer["placement"] 
+        }
+        self._appendToItemKey("players", "discriminator", newPlayer["discriminator"], ["tournaments"], tournamentInfo)
+        self._appendToItemKey("players", "discriminator", newPlayer["discriminator"], ["setOfEntrantIds"], tournamentInfo["entrantId"])
+
+    def getPlayers(self):
+        return self.activeDatabase["players"]
+
+    def getPlayerFromDiscriminator(self, discriminator):
+        #Get player from startgg discriminator
+        if self.playerStored(discriminator):
+            for player in self.getPlayers():
+                if player["discriminator"] == discriminator:
+                    return True, player
+        return False, None
+
+    def addPlayer(self, newPlayer):
+        """
+        Add player to database, return status:\n
+            1   : Player added
+            0   : Player updated
+            -1  : Error
+        """
+        status = self._addPlayer(newPlayer)
+        if status == 0:
+            self._updatePlayer(newPlayer)
+        return status
+
+    def _addPlayer(self, newPlayer):
+        setOfDiscriminators = self._getItems("playerDiscriminators")
+        try:
+            if newPlayer["discriminator"] in setOfDiscriminators:
+                return 0
+            tournamentInfo = {
+                "entrantId" : newPlayer["entrantId"],
+                "tournamentId" : newPlayer["tournamentId"],
+                "placement" : newPlayer["placement"] 
             }
-    
-
-def getPlayerlist():
-    return tracklist["players"]
-
-def addPlayer(player : dict) -> None:
-    if player["discriminator"] in tracklist["playerDiscriminators"]:
-        return False
-    tracklist["players"].append(player)
-    tracklist["playerDiscriminators"].add(player["discriminator"])
-    print("adding", player["discriminator"])
-    return True
-
-def removePlayer(startggDiscriminator) -> None:
-    exist = False
-    if startggDiscriminator in tracklist["playerDiscriminators"]:
-        exist = True
-    if exist:
-        tracklist["playerDiscriminators"].remove(startggDiscriminator)
-    for player in tracklist["players"]:
-        if player["discriminator"] == startggDiscriminator:
-            tracklist["players"].remove(player)
-            break
+            newPlayerFiltered = {
+                "name" : newPlayer["name"],
+                "userId" : newPlayer["userId"],
+                "discriminator" : ["discriminator"],
+                "link" : newPlayer["link"],
+                "tournaments" : [tournamentInfo],
+                "setOfEntrantIds" : {tournamentInfo["entrantId"]}
+            }
+            self._add("players", newPlayerFiltered)
+            return 1
+        except:
+            return -1
         
-def getPlayersSetCheck() -> set:
-    discriminators = set()
-    for player in tracklist:
-        discriminators.add(player["startgg"])
-    return discriminators
+    def removePlayer(self, startggDiscriminator):
+        setOfDiscriminators = self._getItems("playerDiscriminators")
+        if startggDiscriminator in setOfDiscriminators:
+            self._removeDict("players", "discriminator", startggDiscriminator)
+        
+    def getSetCheck(self):
+        return self._getItems("playerDiscriminators")
+    
+    def playerStored(self, discriminator):
+        savedPlayers = self._getItems("playerDiscriminators")
+        if discriminator in savedPlayers:
+            return True
+        return False
 
-def savePlayers():
-    with gzip.open(file_path, "wb") as trackedPlayers:
-        dump(tracklist, trackedPlayers)
-        trackedPlayers.close()
+    def loadPlayers(self):
+        self._load_db()
+
+    def savePlayers(self):
+        self._save_db()
+

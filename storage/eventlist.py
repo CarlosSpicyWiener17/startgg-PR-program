@@ -1,16 +1,35 @@
 from storage.errors import *
 from storage.database import Database
 
-# Configure logging once in your app
+entrantStructure = {
+            "name" : (None, str),
+            "userId" : (None,int),
+            "discriminator" : (None, str),
+            "link" : (None, str),
+            "entrantId" : (None,int),
+            "tournamentId" : (None,int),
+            "placement" : (None,int)
+        }
 
+ownerStructure = {
+            "name" : (None, str),
+            "discriminator" : (None, str),
+            "link" : (None, str),
+            "id" : (None, int)
+        }
 
-filename = "tournaments"
+mainEventStructure = {
+    "id" : (None, int),
+    "name" : (None, str),
+    "state" : (None, str),
+    "entrants" : (list, dict)
+}
 
 tournamentStructure = {
     "name" : (None, str),
     "id" : (None, int),
     "state" : (None, int),
-    "Owner" : (None, dict),
+    "Owner" : (None, ownerStructure),
     "mainEvent" : (None, dict),
     "link" : (None, str),
     "attendeeAmount" : (None, int),
@@ -20,22 +39,23 @@ tournamentStructure = {
     "eventTier" : (None, str),
     "startAt" : (None, int),
     "date" : (None, str),
+    "counting" : (None, bool)
 }
 
-databaseStructure = {
+eventDatabaseStructure = {
         "events" : (list, tournamentStructure),
         "eventIds" : (set, int),
         "checkedDates" : (list, tuple)
     }
 
-databaseName = "Events"
+eventDatabaseName = "Events"
 
 class Event_db(Database):
     """
     Tournament database
     """
     def __init__(self):
-        super().__init__(databaseName, databaseStructure)
+        super().__init__(eventDatabaseName, eventDatabaseStructure)
 
     def loadEvents(self):
         self._load_db()
@@ -56,6 +76,7 @@ class Event_db(Database):
         """
         Add several tournaments to event database
         """
+        print("Try addMultiple")
         self._updateMultipleDict("events", "id", eventsToAdd)
         self._addMultiple("eventIds", set([event["id"] for event in eventsToAdd]))
 

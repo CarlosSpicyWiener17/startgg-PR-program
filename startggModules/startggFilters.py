@@ -2,12 +2,22 @@ from utility import toDate
 from startggModules.errors import *
 import logging
 
-# Configure logging once in your app
-logging.basicConfig(
-    filename="error.log",  # or just leave it blank to log to console
-    level=logging.ERROR,   # Only log warnings/errors
-    format="%(asctime)s - %(levelname)s - %(message)s"
-)
+logger = logging.getLogger("my_app")
+logger.setLevel(logging.DEBUG)
+
+error_handler = logging.FileHandler("error.log")
+error_handler.setLevel(logging.ERROR)
+error_format = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+error_handler.setFormatter(error_format)
+
+info_handler = logging.FileHandler("info.log")
+info_handler.setLevel(logging.INFO)
+info_format = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+info_handler.setFormatter(info_format)
+
+logger.addHandler(error_handler)
+logger.addHandler(info_handler)
+
 
 def setUser(entrant : dict) -> tuple[bool,dict|None]:
     try:
@@ -38,17 +48,17 @@ def setUser(entrant : dict) -> tuple[bool,dict|None]:
             }
     #These errors are fine enough
     except (UserError, UserIdError, UserDiscriminatorError):
-        logging.error("Issue with entrant in tournament", exc_info=True)
+        logger.info("Issue with entrant in tournament", exc_info=True)
         return True, {
             "id" : None,
             "discriminator" : None,
             "link" : None
         }
     except:
-        logging.error("Error in setUser()", exc_info=True)
+        logger.error("Error in setUser()", exc_info=True)
         return False, None
 
-def entrantFilter(entrant : dict) -> tuple[bool, dict | None]:
+def entrantFilter(entrant : dict, tournamentId: int) -> tuple[bool, dict | None]:
     """
     Safe function for filtering entrants into dicts:\n
         "Name"\t\t #startgg gamerTag
@@ -67,22 +77,22 @@ def entrantFilter(entrant : dict) -> tuple[bool, dict | None]:
         try:
             tournamentGamerTag = entrant["participants"][0]["gamerTag"]
         except:
-            logging.error(f"GamerTag not found. {entrantId}", exc_info=True)
+            logger.error(f"GamerTag not found. {entrantId}", exc_info=True)
             return False, None
         if tournamentGamerTag is None:
-            logging.error(f"GamerTag not found. {entrantId}", exc_info=True)
+            logger.error(f"GamerTag not found. {entrantId}", exc_info=True)
             return False, None
         
         #set user
         success, user = setUser(entrant)
         if not success:
-            logging.error(f"User not found. {entrantId}", exc_info=True)
+            logger.error(f"User not found. {entrantId}", exc_info=True)
             return False, None
         try:
             placement = entrant["standing"]["placement"]
         except:
             placement = None
-            logging.error("No placement", exc_info=True)
+            logger.info("No placement", exc_info=True)
             return False, None
         
         newEntrant = {
@@ -91,27 +101,29 @@ def entrantFilter(entrant : dict) -> tuple[bool, dict | None]:
             "discriminator" : user["discriminator"],
             "link" : user["link"],
             "entrantId" : entrantId,
+            "tournamentId" : tournamentId,
             "placement" : placement
         }
         return True, newEntrant
     except:
-        logging.error(f"Unknown error. {entrantId}", exc_info=True)
+        logger.error(f"Unknown error. {entrantId}", exc_info=True)
         return False, None
     
 
-def allEntrantsFilter(response : dict) -> tuple[list, int]:
+def allEntrantsFilter(response : dict, tournamentId : int) -> tuple[list, int]:
     """
     Filters an events entrants in desired format. Returns the entrants list
     """
     filteredEntrants = []
     attendeeAmount = 0
     for entrant in response["data"]["event"]["entrants"]["nodes"]:
-        success, filteredEntrant = entrantFilter(entrant)
+        success, filteredEntrant = entrantFilter(entrant, tournamentId)
         attendeeAmount+=1
         if success:
+            filteredEntrant["tournamentId"] = tournamentId
             filteredEntrants.append(filteredEntrant)
         continue
-    
+    filteredEntrants.sort(key= lambda x: x["placement"])
     return filteredEntrants, attendeeAmount
 
 def setOwner(tournament) -> dict | None:
@@ -162,19 +174,19 @@ def setOwner(tournament) -> dict | None:
             "id" : tournamentOwnerId
         }
     except OwnerError:
-        logging.error("Owner doesnt exist", exc_info=True)
+        logger.error("Owner doesnt exist", exc_info=True)
         return None
     except OwnerDiscriminatorError:
-        logging.error("Owner discriminator doesnt exist", exc_info=True)
+        logger.error("Owner discriminator doesnt exist", exc_info=True)
         return None
     except OwnerIdError:
-        logging.error("Owner id doesnt exist??", exc_info=True)
+        logger.error("Owner id doesnt exist??", exc_info=True)
         return None
     except OwnerGamerTagError:
-        logging.error("Owner player/gamertag doesnt exist", exc_info=True)
+        logger.error("Owner player/gamertag doesnt exist", exc_info=True)
         return None
     except:
-        logging.error("Unknown error. Contact", exc_info=True)
+        logger.error("Unknown error. Contact", exc_info=True)
         return None
 
 def getMainEvent(events : list, link : str) -> dict | None:
@@ -193,12 +205,13 @@ def getMainEvent(events : list, link : str) -> dict | None:
                 else:
                     raise InProgressError(link, event["name"])
         except InProgressError:
-            logging.error("Tournament hasnt been completed", exc_info=True)
+            logger.error("Tournament hasnt been completed", exc_info=True)
     if singlesEvents == []:
         return False, None
     if len(singlesEvents) == 1:
         return True, singlesEvents[0]
     else:
+        logger.info("Too many tournaments fit", exc_info=True)
         return False, None
     
 
@@ -236,22 +249,26 @@ def tournamentFilter(tournament : dict) -> tuple[bool, dict | None]:
             raise EventMissingError(tournamentLink, None)
         
     except EventMissingError:
-        logging.error("None of the events matches requirements for singles", exc_info=True)
+        logger.info("None of the events matches requirements for singles", exc_info=True)
         return False, None
     except:
-        logging.error("Unknown error", exc_info=True)
+        logger.error("Unknown error", exc_info=True)
         return False, None
     
         
     
 
 def allTournamentsFilter(response):
-    filteredTournaments = []
-    for tournament in response["data"]["tournaments"]["nodes"]:
-        #Filter
-        success, filteredTournament = tournamentFilter(tournament)
-        #If good, append
-        if success:
-            filteredTournaments.append(filteredTournament)
+    try:
+        filteredTournaments = []
+        for tournament in response["data"]["tournaments"]["nodes"]:
+            #Filter
+            success, filteredTournament = tournamentFilter(tournament)
+            #If good, append
+            if success:
+                filteredTournaments.append(filteredTournament)
+    except:
+        print("bad response object")
+        print(response)
 
     return filteredTournaments

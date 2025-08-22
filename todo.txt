@@ -1,29 +1,24 @@
-update tournamentFilter to ignore sub 12 attendee tournaments DONE
-
-fillEntrants function
-    count entrants, with tracklist, to give points done
-
-fixSets function
+Done:
+    Refactored:
+        startggFilters, startggInterface
     
+    Created:
+        Base Database class, Events Database subclass, Tracked Players Database subclass, All Players Database subclass
+        Error types and logging added to the most base modules
+________________________________________________________________________________________
 
-when all functions, create following
+To do next:
 
-bracket list
-date;tournamentName;trackedPlayers;bracketSize;totalPoints;Link;notablePlacements
+    Create:
+        UI class and System App class, Tracked TOs Database subclass
+        must be made alongside eachother for testing purposes
 
+    Priority list:
+        Refactor system functions and integrate with new System App class
+________________________________________________________________________________________
+        
+All Players planned features:
 
-h2h organiser
-    need SPR rating function
-    cumulative valid spr / valid amount tournaments
-    approximate best players ordering
-
-excel converter
-
-longterm:
-    simple UI
-
-    
-
-UI to do:
-
-    
+    Cool:
+        Search for player name if you wanna find one and it limits the ones
+________________________________________________________________________________________    

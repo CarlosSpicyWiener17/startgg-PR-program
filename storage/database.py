@@ -4,17 +4,29 @@ import logging
 import gzip
 import os
 
-logging.basicConfig(
-    filename="error.log",  # or just leave it blank to log to console
-    level=logging.ERROR,   # Only log warnings/errors
-    format="%(asctime)s - %(levelname)s - %(message)s"
-)
+logger = logging.getLogger("my_app")
+logger.setLevel(logging.DEBUG)
+
+error_handler = logging.FileHandler("error.log")
+error_handler.setLevel(logging.ERROR)
+error_format = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+error_handler.setFormatter(error_format)
+
+info_handler = logging.FileHandler("info.log")
+info_handler.setLevel(logging.INFO)
+info_format = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+info_handler.setFormatter(info_format)
+
+logger.addHandler(error_handler)
+logger.addHandler(info_handler)
 
 def getAllowedDatatypes(subDatabase):
     allowedDatatypes = set()
     #Check if the structure is iterable, meaning it has multiple valid datatypes
     if type(subDatabase[1]) is str:
         allowedDatatypes.add(str)
+    elif type(subDatabase[1]) is dict:
+        allowedDatatypes.add(dict)
     else:
         try:
             for datatype in subDatabase[1]:
@@ -102,9 +114,9 @@ class Database:
             else:
                 raise KeyError
         except (KeyError, TypeError, InnerKeyError, InnerTypeError):
-            logging.error("_add error", exc_info=True)
+            logger.error("_add error", exc_info=True)
         except:
-            logging.error("Unknown _add error", exc_info=True)
+            logger.error("Unknown _add error", exc_info=True)
 
     def _addDict(self, databaseKey, addition):
         """
@@ -129,12 +141,13 @@ class Database:
             else:
                 raise KeyError
         except (KeyError, TypeError, InnerKeyError, InnerTypeError):
-            logging.error("_addDict error", exc_info=True)
+            logger.error("_addDict error", exc_info=True)
         except:
-            logging.error("Unknown _addDict error", exc_info=True)
+            logger.error("Unknown _addDict error", exc_info=True)
         
     def _updateMultipleDict(self, key, identifierKey, additions):
         try:
+            print("within")
             if self._structure.get(key) is None:
                 raise KeyError
             subDatabase = self._structure[key]
@@ -151,7 +164,8 @@ class Database:
             
             #Check for correct types
             allowedDatatypesItems = getAllowedDatatypes(subDatabase)
-            if not type(additions) in allowedDatatypesItems:
+            print("type additions: ", type(additions[0]), "\nallowed datatypes")
+            if not type(additions[0]) in allowedDatatypesItems:
                 raise TypeError
             if type(additions) is not subDatabase[0]:
                 raise TypeError
@@ -159,25 +173,16 @@ class Database:
             toAdd = additions
 
             #Do correct based on method available
-            for existingItem in self.activeDatabase[key]:
-                for addition in additions:
-                    if existingItem[identifierKey] == addition[identifierKey]:
-                        break
-                if hasattr(toAdd, "append"):
-                    toAdd.append(addition)
-                elif hasattr(toAdd, "add"):
-                    toAdd.add(addition)
-                else:
-                    raise KeyError
-            
+            if len(toAdd) > 0:
+                print("to add has")
             self._overwrite(key, toAdd)
 
         except (KeyError, TypeError, InnerKeyError, FunctionChoiceError, InnerTypeError):
-            logging.error("_addMultiple error", exc_info=True)
+            logger.error("_addMultiple error", exc_info=True)
         except:
-            logging.error("Unknown _addMultiple error", exc_info=True)
+            logger.error("Unknown _addMultiple error", exc_info=True)
 
-    def _addMultiple(self, key, additions):
+    def _addMultiple(self, key, additions : set):
         """
         Adds a single item to the key of the active database.
         Provides necessary function + typechecking per iterable and datatype
@@ -194,18 +199,17 @@ class Database:
                 raise Exception
             #Check for correct types
             allowedDatatypesItems = getAllowedDatatypes(subDatabase)
-            if additions[0] not in allowedDatatypesItems:
+            if type(list(additions)[0]) not in allowedDatatypesItems:
                 raise TypeError
             if type(additions) is not subDatabase[0]:
                 raise TypeError
-
             #Do correct based on method available
             for addition in additions:
                 self._add(key, addition)
         except (KeyError, TypeError, InnerKeyError, FunctionChoiceError, InnerTypeError):
-            logging.error("_addMultiple error", exc_info=True)
+            logger.error("_addMultiple error", exc_info=True)
         except:
-            logging.error("Unknown _addMultiple error", exc_info=True)
+            logger.error("Unknown _addMultiple error", exc_info=True)
     
     def getDatabase(self):
         """
@@ -254,9 +258,9 @@ class Database:
                 raise
             return retrievedItem
         except (TypeError, InnerTypeError, KeyError, InnerKeyError):
-            logging.error("Error within _getItemFromKeyValue", exc_info=True)
+            logger.error("Error within _getItemFromKeyValue", exc_info=True)
         except:
-            logging.error("Unknown error within _getItemFromkeyValue", exc_info=True)
+            logger.error("Unknown error within _getItemFromkeyValue", exc_info=True)
         return None
 
         
@@ -271,15 +275,17 @@ class Database:
 
             if subDatabase[0] is not type(newSubDatabase):
                 raise TypeError
-            
+            if len(newSubDatabase)>0:
+                print("overwrite")
             self.activeDatabase[databaseKey] = newSubDatabase
         except (KeyError, InnerKeyError, TypeError, InnerTypeError):
-            logging.error("Issue with _overwrite", exc_info=True)
+            logger.error("Issue with _overwrite", exc_info=True)
         except:
-            logging.error("Unknown issue with _overwrite", exc_info=True)
+            logger.error("Unknown issue with _overwrite", exc_info=True)
 
 
     def _conditionalGetDictItems(self, databaseKey, valueKey, condition):
+        print("condit")
         try:
             #Check subdatabase exists
             if self._structure.get(databaseKey) is None:
@@ -298,21 +304,24 @@ class Database:
             
             retrievedItems = []
 
-            #Check if the structure is iterable, meaning it has multiple valid datatypes        
+            #Check if the structure is iterable, meaning it has multiple valid datatypes
+            print("Hey")       
+            print(self.activeDatabase) 
             for item in self.activeDatabase[databaseKey]:
                 if condition(item[valueKey]):
                     retrievedItems.append(item)
         except (KeyError, InnerKeyError, TypeError, InnerTypeError):
-            logging.error("Issue with _conditionalGetDictItems", exc_info=True)
+            logger.error("Issue with _conditionalGetDictItems", exc_info=True)
         except ConditionError:
-            logging.error("Condition was not callable", exc_info=True)
+            logger.error("Condition was not callable", exc_info=True)
+        print("Retrieved items length is ", len(retrievedItems))
         return retrievedItems
 
     
 
     def _remove(self, databaseKey, removal):
         """
-        Adds a single item to the key of the active database.
+        Removes a single item from the key of the active database.
         Provides necessary function + typechecking per iterable and datatype
         """
 
@@ -390,9 +399,9 @@ class Database:
                 self.activeDatabase[databaseKey][changeKey].add(addition)
         
         except (KeyError, InnerKeyError, TypeError, InnerTypeError):
-            logging.error("Complicated error", exc_info=True)
+            logger.error("Complicated error", exc_info=True)
         except:
-            logging.error("Unknown error", exc_info=True)
+            logger.error("Unknown error", exc_info=True)
 
     def _addToDictInIterable(self, databaseKey, identifierKey, identifierValue, changeKey, addition):
         try:
@@ -431,9 +440,9 @@ class Database:
                     if hasattr(dictionary[changeKey], "add"):
                         dictionary[changeKey].add(addition)
         except (KeyError, InnerKeyError, TypeError, InnerTypeError):
-            logging.error("Complicated error", exc_info=True)
+            logger.error("Complicated error", exc_info=True)
         except:
-            logging.error("Unknown error", exc_info=True)
+            logger.error("Unknown error", exc_info=True)
 
     def _addMultipleToDictIterable(self, databaseKey, identifierKey, identifierValue, changeKey, additions, types):
         try:
@@ -466,9 +475,9 @@ class Database:
                     if hasattr(dictionary[changeKey], "update"):
                         dictionary[changeKey].update(additions)
         except (KeyError, InnerKeyError, TypeError, InnerTypeError):
-            logging.error("Complicated error", exc_info=True)
+            logger.error("Complicated error", exc_info=True)
         except:
-            logging.error("Unknown error", exc_info=True)
+            logger.error("Unknown error", exc_info=True)
 
     def _overwriteDictItem(self, databaseKey, identifierKey, identifierValue, changeKey, newValue):
         try:
@@ -493,9 +502,9 @@ class Database:
                 if dictionary[identifierKey] == identifierValue:
                     dictionary[changeKey] = newValue
         except (KeyError, InnerKeyError, TypeError, InnerTypeError):
-            logging.error("Complicated error", exc_info=True)
+            logger.error("Complicated error", exc_info=True)
         except:
-            logging.error("Unknown error", exc_info=True)
+            logger.error("Unknown error", exc_info=True)
                 
 
     def _updateItemKey(self, databaseKey, identifierKey, identifierValue, valueToChangeKey, newValue):
@@ -528,9 +537,9 @@ class Database:
                 raise InnerTypeError(f"{newValue} of type {type(newValue)} should be {allowedChangeDatatypes}")
             
             try:
-                for item in self.activeDatabase[databaseKey]:
+                for i, item in enumerate(self.activeDatabase[databaseKey]):
                     if item[identifierKey] == identifierValue:
-                        item[valueToChangeKey] = newValue
+                        self.activeDatabase[databaseKey][i][valueToChangeKey] = newValue
                         break
                 success = True
             except:
@@ -538,11 +547,62 @@ class Database:
             if not success:
                 raise UpdateError(identifierKey=identifierKey, identifierValue=identifierValue, valueToChangeKey=valueToChangeKey, newValue=newValue)
         except (TypeError, InnerTypeError, KeyError, InnerKeyError):
-            logging.error("Complicated error", exc_info=True)
+            logger.error("Complicated error", exc_info=True)
         except UpdateError:
             print("Error when updating dict")
         except:
-            logging.error("Unknwon error", exc_info=True)
+            logger.error("Unknwon error", exc_info=True)
+
+    def _appendToItemKey(self, databaseKey, identifierKey, identifierValue, valueToChangeKey, addition):
+        """
+        Appends newValue into valueToChangeKey. Item is found based on identifierKey, identifierValue
+        """
+        try:
+            #Check if databasekey exists
+            if self._structure.get(databaseKey) is None:
+                raise KeyError
+            
+            subDatabase = self._structure[databaseKey]
+
+            if type(subDatabase[0]) is not type(dict):
+                raise InnerTypeError(f"database[{databaseKey}] is not dict")
+            
+            dictStructure = subDatabase[1]
+            
+            if dictStructure.get(identifierKey) is None:
+                raise InnerKeyError(f"{identifierKey} is not in database[{databaseKey}]")
+            
+            dictSubDatabaseIdentifier = dictStructure[identifierKey]
+            allowedIdentifierDatatypes = getAllowedDatatypes(dictSubDatabaseIdentifier)
+            if not type(identifierValue) in allowedIdentifierDatatypes:
+                raise InnerTypeError(f"{identifierValue} of type {type(identifierValue)} should be {allowedIdentifierDatatypes}")
+            
+            dictSubDatabaseChange = dictStructure[valueToChangeKey]
+            allowedChangeDatatypes = getAllowedDatatypes(dictSubDatabaseChange)
+            if not type(addition) in allowedChangeDatatypes:
+                raise InnerTypeError(f"{addition} of type {type(addition)} should be {allowedChangeDatatypes}")
+            
+            try:
+                for i, item in enumerate(self.activeDatabase[databaseKey]):
+                    if item[identifierKey] == identifierValue:
+                        if hasattr(subDatabase[0], "append"):
+                            self.activeDatabase[databaseKey][i][valueToChangeKey].append(addition)
+                        elif hasattr(subDatabase[0], "add"):
+                            self.activeDatabase[databaseKey][i][valueToChangeKey].add(addition)
+                        else:
+                            raise KeyError
+                        break
+                success = True
+            except:
+                success = False
+            if not success:
+                raise UpdateError(identifierKey=identifierKey, identifierValue=identifierValue, valueToChangeKey=valueToChangeKey, newValue=addition)
+        except (TypeError, InnerTypeError, KeyError, InnerKeyError):
+            logger.error("Complicated error", exc_info=True)
+        except UpdateError:
+            print("Error when updating dict")
+        except:
+            logger.error("Unknwon error", exc_info=True)
         
     def _save_db(self):
         """
@@ -553,4 +613,4 @@ class Database:
                 dump(self.activeDatabase,databaseFile)   
                 databaseFile.close()
         except:
-            logging.error("Some error with saving", exc_info=True)
+            logger.error("Some error with saving", exc_info=True)
