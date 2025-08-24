@@ -8,11 +8,13 @@ Done:
         Main page export section:
             Entry field: Season #
             Export button: Exports to .xlsx
+        Fixed tournament creation to include pages
 ________________________________________________________________________________________
 
 To do next:
 
         To do now IMPORTANT:
+            
             Re-do tournament rankings button, based on current tracked Players
 
             xlsx writer section:

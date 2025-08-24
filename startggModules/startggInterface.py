@@ -266,11 +266,15 @@ class startggInterface:
         #if empty, means we only need to get tournaments
         ranked=None
         allTournaments = predoneTournaments
+        tournamentsToQuery = []
         print("Length of tournaments with predones", len(allTournaments))
+        for tournament in tournamentsToProcess:
+            if not tournament["id"] in predoneEventIds:
+                tournamentsToQuery.append(tournament)
         if not tournamentsToProcess == []:
-            print("How many tournaments to process: ", len(tournamentsToProcess))
+            print("How many tournaments to process: ", len(tournamentsToQuery))
             print("Querying tournaments")
-            filled = self._fillEventEntrants(tournamentsToProcess, predoneEventIds)
+            filled = self._fillEventEntrants(tournamentsToQuery, predoneEventIds)
             ranked = rankTournamentTiers(filled, self.trackedPlayers.getSetCheck())
             allTournaments.extend(ranked)
         else:

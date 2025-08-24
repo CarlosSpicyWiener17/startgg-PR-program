@@ -16,7 +16,7 @@ playerStructure = {
 }
 
 allPlayersStructure = {
-    "players" : (list, dict),
+    "players" : (list, playerStructure),
     "playerDiscriminators" : (set, str)
 }
 

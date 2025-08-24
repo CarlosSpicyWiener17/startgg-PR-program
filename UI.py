@@ -36,7 +36,7 @@ class UI:
         self._createWindow()
         self._createMainTabs()
         self._createMainPage()
-
+        self.currentPage = 1
         self.tournaments = dict()
         pass
 
@@ -278,6 +278,8 @@ class UI:
 
         scrollbar.grid(row=0, column = 0, sticky = "nswe")
 
+
+
     def createTournaments(self):
         print("hey im creating some frames")
         tournamentsFrame = self.mainTabs["tabs"]["Tournaments"]
@@ -307,23 +309,39 @@ class UI:
         tabsFrame.columnconfigure(3,minsize=220, weight=0)
         tabsFrame.columnconfigure(4,minsize=80, weight=0)
         tabsFrame.rowconfigure(0, minsize=60, weight=0)
-        tabsFrame.grid(row=0, column=0, padx=[40,60], sticky="nwe")
-        tabsFrame.grid_propagate(False)
-        for i, tournament in enumerate(tournaments):
-            #print("creating a frame")
-            singleFrame = self._createSingleTournamentFrame(tournament, scrollbar)
-            singleFrame.grid(row=i, column=0, sticky="nswe")
-            self.tournaments[tournament["name"]] = singleFrame
+        tabsFrame.grid(row=0, column=0, padx=[40,60], sticky="we")
+        tabsFrame.grid_propagate(True)
+
+        if len(tournaments)>50:
+            lastIndex = 0
+            for i, tournament in enumerate(tournaments[(self.currentPage-1)*50:self.currentPage*50]):
+                singleFrame = self._createSingleTournamentFrame(tournament, scrollbar)
+                singleFrame.grid(row=i, column = 0, sticky="nswe")
+                lastIndex = i
+            pageFrame = ctk.CTkFrame(master=scrollbar)
+            prevButton, nextButton = ctk.CTkButton(master=pageFrame, text="Prev page", command= lambda: self.changeTPage(-1) ), ctk.CTkButton(master=pageFrame, text="Next page", command= lambda: self.changeTPage(1) )
+            prevButton.grid(row=0, column = 0)
+            nextButton.grid(row=0, column = 1)
+            pageFrame.grid(row=lastIndex+1, column=0)
+        else:
+            for i, tournament in enumerate(tournaments[(self.currentPage-1)*50:self.currentPage*50]):
+                singleFrame = self._createSingleTournamentFrame(tournament, scrollbar)
+                singleFrame.grid(row=i, column = 0, sticky="nswe")
+            
+
         scrollbar.columnconfigure(0, weight=1)
         #The poor children!
         
 
         scrollbar.grid(row=1, column=0, padx=30, sticky="nswe")
-        tournamentsFrame.rowconfigure(1, minsize=200, weight=1)
+        tournamentsFrame.rowconfigure(1, minsize=100, weight=1)
         tournamentsFrame.columnconfigure(0, minsize=300, weight=1)
         tournamentsFrame.rowconfigure(0, minsize=40, weight=0)
         print("should be done now")
 
+    def changeTPage(self, add):
+        self.currentPage += add
+        self.createTournaments()
 
     def _createMainTabs(self):
         #Creation
