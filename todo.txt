@@ -5,16 +5,40 @@ Done:
     Created:
         Base Database class, Events Database subclass, Tracked Players Database subclass, All Players Database subclass
         Error types and logging added to the most base modules
+        Main page export section:
+            Entry field: Season #
+            Export button: Exports to .xlsx
 ________________________________________________________________________________________
 
 To do next:
 
-    Create:
-        UI class and System App class, Tracked TOs Database subclass
+        To do now IMPORTANT:
+            Re-do tournament rankings button, based on current tracked Players
+
+            xlsx writer section:
+                #COMPLETE # page 1: TRACKLIST is every tracked player in following format                    
+
+                page 2: S(#season)B is every tournament in following format
+                    Date    |   Tournament   |   T. Players     |   Bracket Size    |   Points   |   Link    |   Notable Placements
+                                                                                      1 point for                Best to worst placements
+                                                                                      each T. player                of T. Players
+                                                                                     and 0/1/2
+                                                                                     attendee bonus
+                                                                                     for <40/40+/55+
+                                                                                     players
+                Row format is the event tier color from Date to Link
+
+                page 3: S(#season)C is every tracked player in following format
+                    Player  |   Notable placements  |   Notable Wins    |   Losses
+                Notable placements color format is event tier color
+
+                page 4: S(#season) H2H is a head 2 head table of every tracked player
+                notes: top cut is an aggregate of tracked players chosen to go into it
+        
+        UI class and System App class, Tracked TOs Database subclass    ---WIP
         must be made alongside eachother for testing purposes
 
-    Priority list:
-        Refactor system functions and integrate with new System App class
+        Refactor system functions and integrate with new System App class   ---WIP
 ________________________________________________________________________________________
         
 All Players planned features:

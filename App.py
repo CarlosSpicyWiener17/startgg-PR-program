@@ -1,5 +1,6 @@
 import threading as t
 from startggModules.startggInterface import startggInterface
+from excel import Exporter
 import webbrowser
 from UI import UI
 from time import sleep
@@ -10,37 +11,62 @@ class App:
         self._setupInfopoints()
         self.UI = UI(self)
         self.startgg = startggInterface(self)
+        self.writer = Exporter(self)
+        tracklist = self.startgg.trackedPlayers.getTracklist()
+        print(tracklist)
+        self.tracklistInfo = self.startgg.playerList.getPlayers(tracklist)
+        print(self.tracklistInfo)
+        self.tournamentsInfo = self.startgg.events.getEvents()
+        self.UI.createTracklist()
 
     def start(self):
         self.UI.start()
 
-    def _setupLocks(self):
-        self.startggLock = t.Lock()
-        self.systemLock = t.Lock()
-        self.databaseLock = t.Lock()
-
     def exit(self):
         self.startgg.save()
 
-    def _setupInfopoints(self):
-        self.tournamentsInfo = []
+    def trackPlayer(self, discriminator):
+        status = self.startgg.enterPlayer(discriminator)
+        self.startgg.getTrackedPlayers()    
+        self.updateTracklist()
+        return status
+
+    def untrackPlayer(self, discriminator):
+        self.startgg.trackedPlayers.removeTrackedPlayer(discriminator)
+        self.startgg.getTrackedPlayers()
+        self.updateTracklist()
+
+    def updateCounting(self, id, counting):
+        #Turn counting integer into bool
+        self.startgg.events.updateCounting(id, counting==1)
 
     def updateTournamentTier(self, newTier, tournamentId):
         self.startgg.events.updateTournamentTier(newTier, tournamentId)
 
-    def _updateTournaments(self):
-        self.UI.createTournaments()
-
     def openLink(self,link):
         webbrowser.open(link,2,True)
-
-    def updateCounting(self, id, counting):
-
-        self.startgg.updateCounting(id, counting==1)
 
     def getTournaments(self, s, e):
         t.Thread(target=lambda: self.startgg.getTournaments(s,e), daemon=False).start()
 
-    def trackPlayer(self, discriminator):
-        return self.startgg.enterPlayer(discriminator)
+    def export(self, entryField):
+        self.writer.export(entryField.get())
+
+    def getTracklist(self):
+        self.startgg.getTrackedPlayers()
+
+    def updateTracklist(self):
+        self.UI.createTracklist()
+
     
+    def _setupLocks(self):
+        self.startggLock = t.Lock()
+        self.systemLock = t.Lock()
+        self.databaseLock = t.Lock()
+    
+    def _updateTournaments(self):
+        self.UI.createTournaments()
+
+    def _setupInfopoints(self):
+        self.tournamentsInfo = []
+        self.tracklistInfo = []

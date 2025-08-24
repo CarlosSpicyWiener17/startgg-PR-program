@@ -164,7 +164,6 @@ class Database:
             
             #Check for correct types
             allowedDatatypesItems = getAllowedDatatypes(subDatabase)
-            print("type additions: ", type(additions[0]), "\nallowed datatypes")
             if not type(additions[0]) in allowedDatatypesItems:
                 raise TypeError
             if type(additions) is not subDatabase[0]:
@@ -173,8 +172,6 @@ class Database:
             toAdd = additions
 
             #Do correct based on method available
-            if len(toAdd) > 0:
-                print("to add has")
             self._overwrite(key, toAdd)
 
         except (KeyError, TypeError, InnerKeyError, FunctionChoiceError, InnerTypeError):
@@ -247,7 +244,6 @@ class Database:
             #Loop through. Give success if looped through without errors. Return item | None
             try:
                 for item in self.activeDatabase[databaseKey]:
-                    print(item, value)
                     if item[valueKey] == value:
                         retrievedItem = item
                         break
@@ -275,8 +271,6 @@ class Database:
 
             if subDatabase[0] is not type(newSubDatabase):
                 raise TypeError
-            if len(newSubDatabase)>0:
-                print("overwrite")
             self.activeDatabase[databaseKey] = newSubDatabase
         except (KeyError, InnerKeyError, TypeError, InnerTypeError):
             logger.error("Issue with _overwrite", exc_info=True)
@@ -285,7 +279,6 @@ class Database:
 
 
     def _conditionalGetDictItems(self, databaseKey, valueKey, condition):
-        print("condit")
         try:
             #Check subdatabase exists
             if self._structure.get(databaseKey) is None:
@@ -304,9 +297,7 @@ class Database:
             
             retrievedItems = []
 
-            #Check if the structure is iterable, meaning it has multiple valid datatypes
-            print("Hey")       
-            print(self.activeDatabase) 
+            #Check if the structure is iterable, meaning it has multiple valid datatypes 
             for item in self.activeDatabase[databaseKey]:
                 if condition(item[valueKey]):
                     retrievedItems.append(item)
@@ -314,7 +305,6 @@ class Database:
             logger.error("Issue with _conditionalGetDictItems", exc_info=True)
         except ConditionError:
             logger.error("Condition was not callable", exc_info=True)
-        print("Retrieved items length is ", len(retrievedItems))
         return retrievedItems
 
     
@@ -324,25 +314,26 @@ class Database:
         Removes a single item from the key of the active database.
         Provides necessary function + typechecking per iterable and datatype
         """
-
-        if self._structure.get(databaseKey) is None:
-            raise KeyError(f"Error with key: {databaseKey}")
-        
-        subDatabase = self._structure[databaseKey]
-        
-        allowedDatatypes = getAllowedDatatypes(subDatabase)
-        
-        if type(removal) not in allowedDatatypes:
-            raise TypeError
-        
-        #Do correct based on method available
-        if hasattr(subDatabase, "remove"):
-            self.activeDatabase[databaseKey].remove(removal)
-        elif hasattr(subDatabase, "pop") and type(subDatabase) is type(dict):
-            self.activeDatabase[databaseKey].pop(removal)     #remove assuming removal is key instead 
-        else:
-            raise Exception
-        
+        try:
+            if self._structure.get(databaseKey) is None:
+                raise KeyError(f"Error with key: {databaseKey}")
+            
+            subDatabase = self._structure[databaseKey]
+            
+            allowedDatatypes = getAllowedDatatypes(subDatabase)
+            
+            if type(removal) not in allowedDatatypes:
+                raise TypeError
+            
+            #Do correct based on method available
+            if hasattr(subDatabase[0], "remove"):
+                self.activeDatabase[databaseKey].remove(removal)
+            elif hasattr(subDatabase[0], "pop") and type(subDatabase) is type(dict):
+                self.activeDatabase[databaseKey].pop(removal)     #remove assuming removal is key instead 
+            else:
+                raise Exception(databaseKey, removal)
+        except:
+            logger.error("_remove", exc_info=True)
 
     def _removeDict(self, databaseKey, identifierKey, identifierValue):
         """
@@ -390,7 +381,6 @@ class Database:
 
             allowedDatatypesChange = getAllowedDatatypes(subDictStructure[changeKey])
             if not type(addition) in allowedDatatypesChange:
-                print(allowedDatatypesChange, type(addition))
                 raise TypeError
 
             if hasattr(self.activeDatabase[databaseKey][changeKey], "append"):
@@ -549,7 +539,7 @@ class Database:
         except (TypeError, InnerTypeError, KeyError, InnerKeyError):
             logger.error("Complicated error", exc_info=True)
         except UpdateError:
-            print("Error when updating dict")
+            logger.error("Error when updating dict", exc_info=True)
         except:
             logger.error("Unknwon error", exc_info=True)
 

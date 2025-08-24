@@ -93,6 +93,7 @@ query tournament($page: Int!, $ids: [ID!], $entrantPage: Int!, $entrantPerPage: 
         filter: {
           #only ultimate, and type 1 is singles
           ids: $eventIds
+          videogameId: [1386]
         }
       ) {
         #event id, and name for checking if it contains "singles"

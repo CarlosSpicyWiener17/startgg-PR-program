@@ -83,7 +83,7 @@ class Event_db(Database):
     def removeEvent(self, eventId):
         self._removeDict("events", "id", eventId)
 
-    def getEvents(self, ids):
+    def getEvents(self, ids=None):
         if ids is None:
             return self._getItems("events")
         return self._conditionalGetDictItems("events", "id", lambda eventId: eventId in set(ids))
@@ -127,6 +127,9 @@ class Event_db(Database):
             if start <= after and before <= end:
                 return True
         return False
+
+    def updateCounting(self, id, counting):
+        self._updateItemKey("events", "id", id, "counting", counting)
 
     def saveEvents(self):
         self._save_db()

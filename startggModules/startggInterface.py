@@ -45,8 +45,6 @@ class startggInterface:
         self.playerList = AllPlayers()
         self.playerList.loadPlayers()
 
-    #def updateCounting(self, id, counting):
-
     def _getAuthorization(self):
         HEADER = "Bearer "
         with open("auth.txt", "r") as auth:
@@ -55,15 +53,16 @@ class startggInterface:
         self.header = {"Authorization" : HEADER}
 
     def addEvents(self, eventsToAdd):
-        print("Trying to add")
+        gotLock = False
+        logging.info("Trying to acquire lock", exc_info=True)
         with self.system.databaseLock:
-            print("Got lock, adding tournaments")
+            logging.info("Adding events")
             self.events.addEvents(eventsToAdd)
-            print("Adding entrants")
+            logging.info("Adding new entrants")
             for i, tournament in enumerate(eventsToAdd):
                 print(i+1, " tournament of ", len(eventsToAdd))
                 for entrant in tournament["mainEvent"]["entrants"]:
-                    self.playerList.addPlayer(entrant)
+                    self.playerList.addPlayer(entrant, True)
 
     def _getAllTournamentsQuery(self,after,before):
         """
@@ -154,30 +153,44 @@ class startggInterface:
             logger.error("Unknown error", exc_info=True)
             return None
     
+    def getTrackedPlayers(self):
+        print("updating tracklist")
+        tracklist = self.trackedPlayers.getTracklist()
+        self.system.tracklistInfo = self.playerList.getPlayers(tracklist)
+
     def enterPlayer(self, discriminator):
         """
         Adds new user to tracklist, if discriminator leads to a startgg user
         """
-        try:
-            if self.trackedPlayers.isTracked(discriminator):
-                return 0
+        with self.system.databaseLock:
+            try:
+                if self.trackedPlayers.isTracked(discriminator):
+                    return 0
 
-            playerExist, player = self.playerList.getPlayerFromDiscriminator(discriminator)
-            if not playerExist:
-                newUser = self._userQuery(discriminator)
-                player = {
-                    "name" : newUser["name"],
-                    "discriminator" : newUser["discriminator"],
-                    "userId" : newUser["id"],
-                    "link" : "https://www.start.gg/user/"+newUser["discriminator"],
-                    "tournaments" : [],
-                    "setOfEntrantIds" : set(),
-                }
-            self.playerList.addPlayer(player)
-            self.trackedPlayers.addTrackedPlayer(player)
-            return 1
-        except:
-            return -1
+                playerExist, player = self.playerList.getPlayerFromDiscriminator(discriminator)
+                if not playerExist:
+                    newUser = self._userQuery(discriminator)
+                    print("ahoh")
+                    player = {
+                        "name" : newUser["name"],
+                        "discriminator" : newUser["discriminator"],
+                        "userId" : newUser["id"],
+                        "link" : "https://www.start.gg/user/"+newUser["discriminator"],
+                        "tournaments" : [],
+                        "setOfEntrantIds" : set(),
+                    }
+                status = self.playerList.addPlayer(player, False)
+                if status==-1:
+                    print("error")
+                elif status==0:
+                    print("player existed")
+                self.trackedPlayers.addTrackedPlayer(player)
+                return 1
+            except:
+                logger.error("Uh oh enterPlayer error", exc_info=True)
+                return -1
+        self.getTrackedPlayers()    
+        self.system.updateTracklist()
     
     def updateTournamentTier(self, newTier, tournamentId):
         self.events.updateTournamentTier(newTier, tournamentId)
@@ -190,8 +203,6 @@ class startggInterface:
         filledTournaments = []
         for tournament in tournaments:
             entrants, attendeeAmount = self._tournamentEntrantsQuery(tournament["mainEvent"]["id"])
-            if attendeeAmount < 12:
-                continue
             for entrant in entrants:
                 try:
                     entrant["discriminator"]
@@ -210,6 +221,8 @@ class startggInterface:
             tournament["attendeeBonus"] = attendeeBonus
             filledTournaments.append(tournament)
         return filledTournaments
+
+    
 
     def getTournaments(self, start, end):
         with self.system.startggLock:
@@ -255,6 +268,7 @@ class startggInterface:
         allTournaments = predoneTournaments
         print("Length of tournaments with predones", len(allTournaments))
         if not tournamentsToProcess == []:
+            print("How many tournaments to process: ", len(tournamentsToProcess))
             print("Querying tournaments")
             filled = self._fillEventEntrants(tournamentsToProcess, predoneEventIds)
             ranked = rankTournamentTiers(filled, self.trackedPlayers.getSetCheck())

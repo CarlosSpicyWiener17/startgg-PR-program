@@ -44,7 +44,7 @@ def setUser(entrant : dict) -> tuple[bool,dict|None]:
         return True, {
                 "id" : user["id"],
                 "discriminator" : user["discriminator"],
-                "link" : "https://www.start.gg/"+user["slug"]
+                "link" : "https://www.start.gg/user/"+user["discriminator"]
             }
     #These errors are fine enough
     except (UserError, UserIdError, UserDiscriminatorError):
@@ -190,28 +190,46 @@ def setOwner(tournament) -> dict | None:
         return None
 
 def getMainEvent(events : list, link : str) -> dict | None:
-    singlesEvents = []
+    contenders = []
+    if len(events) == 1:
+        print("Just one item")
+        return True, events[0]
     for event in events:
+        print("FIRST ROUND", event, link)
         try:
-            isSingles = (event["name"].find("Singles") != -1) or (event["name"].find("SINGLES") != -1) or (event["name"].find("singles") != -1)
+            
             isCasual = (event["name"].find("Casual") != -1) or (event["name"].find("casual") != -1) or (event["name"].find("CASUAL") != -1)
             redemption = (event["name"].find("redemption") != -1) or (event["name"].find("REDEMPTION") != -1) or (event["name"].find("Redemption") != -1)
             amateur = (event["name"].find("amateur") != -1) or (event["name"].find("AMATEUR") != -1) or (event["name"].find("Amateur") != -1)
             isRedemption = redemption or amateur
             completed = event["state"] == "COMPLETED"
-            if isSingles and (not isCasual) and (not isRedemption):
+            if (not isCasual) and (not isRedemption):
                 if completed:
-                    singlesEvents.append(event)
+                    contenders.append(event)
                 else:
                     raise InProgressError(link, event["name"])
         except InProgressError:
             logger.error("Tournament hasnt been completed", exc_info=True)
+        except:
+            logger.info(f"event[{event} error]")
+    singlesEvents = []
+    if len(contenders)==1:
+        print("len == 1", contenders)
+        return True, contenders[0]
+    else:
+        for event in contenders:
+            print("2ND ROUND", event, link)
+            isSingles = (event["name"].find("Singles") != -1) or (event["name"].find("SINGLES") != -1) or (event["name"].find("singles") != -1)
+
+            if isSingles:
+                singlesEvents.append(event)
     if singlesEvents == []:
+        logger.info(f"No tournaments fit.\nLink: {link}", exc_info=True)
         return False, None
     if len(singlesEvents) == 1:
         return True, singlesEvents[0]
     else:
-        logger.info("Too many tournaments fit", exc_info=True)
+        logger.info(f"No tournaments fit.\nLink: {link}", exc_info=True)
         return False, None
     
 
@@ -229,6 +247,7 @@ def tournamentFilter(tournament : dict) -> tuple[bool, dict | None]:
         tournamentStartAt = tournament["startAt"]
         success, tournamentMainEvent = getMainEvent(tournament["events"], tournamentLink)
         if success:
+            print("Success ", tournamentLink)
             return True, {
                 "name" : tournament["name"],
                 "id" : tournament["id"],

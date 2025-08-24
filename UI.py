@@ -84,6 +84,7 @@ class UI:
         
         self._createSeasonPicker()
         self._createTrackPlayers()
+        self._createExport()
 
     def _createSeasonPicker(self):
         mainPage = self.mainTabs["tabs"]["Main"]
@@ -100,6 +101,19 @@ class UI:
         seasonStartText.grid(row=0, column=0), seasonEndText.grid(row=0, column=2)
         self.seasonStart.grid(row=1, column=0), self.seasonEnd.grid(row=1, column=2)
         getTournamentsButton.grid(row=0, rowspan=2, column=4,)
+
+    def _createExport(self):
+        mainPage = self.mainTabs["tabs"]["Main"]
+
+        exportFrame = ctk.CTkFrame(master=mainPage, height=200)
+
+        #Entry field
+        seasonNum = ctk.StringVar()
+        seasonEntryField = ctk.CTkEntry(master=exportFrame, textvariable=seasonNum, width=140)
+        exportButton = ctk.CTkButton(master=exportFrame, command=lambda: self.system.export(seasonEntryField), text="Export")
+        seasonEntryField.grid(row=0, column=0)
+        exportButton.grid(row=0, column=1)
+        exportFrame.grid(row=2, column=1)
 
     def _trackPlayer(self):
         field = self.trackPlayerEntry
@@ -141,35 +155,6 @@ class UI:
 
         addPlayerFrame.columnconfigure(1, minsize=40)
 
-
-    def _addToSchedule(self, name, functionBody):
-        """
-        Set up a function for use within custom schedule
-        """
-        self.schedule.append({
-            "name" : name,
-            "called" : False,
-            "body" : functionBody
-        })
-
-        self.mainTabs = 0       
-    def _schedule(self, name):
-        """
-        Schedule an existing function to be run next schedule
-        """
-        for i, functionDict in enumerate(self.schedule):
-            if functionDict["name"] == name:
-                self.schedule[i]["called"] = True
-
-    def _customScheduler(self):
-        """
-        Custom repeating scheduler to check for any needed updates to UI
-        """
-        self.window.after(500,self._customScheduler)
-        for i, functionDict in enumerate(self.schedule):
-            if functionDict["called"]:
-                functionDict["called"] = False
-                functionDict["body"]()
 
     def _switchTab(self, tabName):
         for child in self.mainBody.winfo_children():
@@ -239,6 +224,59 @@ class UI:
 
         return tournamentFrame
 
+    def createPlayerlist(self):
+        trackedFrame = self.mainTabs["tabs"]["All players"]
+        trackedFrame.rowconfigure(0, weight=1)
+        trackedFrame.columnconfigure(0, weight=1)
+        trackedPlayers = self.system.tracklistInfo
+        for widget in trackedFrame.winfo_children():
+            widget.grid_forget()
+
+        scrollbar = ctk.CTkScrollableFrame(master=trackedFrame)
+        
+        for i, player in enumerate(trackedPlayers):
+            #print("creating a frame")
+            masterFrame = ctk.CTkFrame(master=scrollbar)
+            masterFrame.columnconfigure(0, weight=1)
+            masterFrame.columnconfigure(1, weight=1)
+            singleFrame = createLabelFrame(player["name"], masterFrame, 40)
+            singleFrame.grid(row=0, column=0, sticky="nswe")
+            untrackButton = ctk.CTkButton(master=masterFrame, text="Untrack", command= lambda x=player["discriminator"]: self.system.untrackPlayer(x))
+            untrackButton.grid(row=0, column=1, sticky="nswe")
+            masterFrame.grid(row=i, column=1, sticky="nswe", padx=2, pady=2)
+
+        scrollbar.columnconfigure(0, minsize=10, weight=1)
+        scrollbar.columnconfigure(1, weight=4, minsize=200)
+        scrollbar.columnconfigure(2, minsize=10, weight=1)
+
+        scrollbar.grid(row=0, column = 0, sticky = "nswe")
+
+    def createTracklist(self):
+        trackedFrame = self.mainTabs["tabs"]["Tracked Players"]
+        trackedFrame.rowconfigure(0, weight=1)
+        trackedFrame.columnconfigure(0, weight=1)
+        trackedPlayers = self.system.tracklistInfo
+        for widget in trackedFrame.winfo_children():
+            widget.grid_forget()
+
+        scrollbar = ctk.CTkScrollableFrame(master=trackedFrame)
+        
+        for i, player in enumerate(trackedPlayers):
+            #print("creating a frame")
+            masterFrame = ctk.CTkFrame(master=scrollbar)
+            masterFrame.columnconfigure(0, weight=1)
+            masterFrame.columnconfigure(1, weight=1)
+            singleFrame = createLabelFrame(player["name"], masterFrame, 40)
+            singleFrame.grid(row=0, column=0, sticky="nswe")
+            untrackButton = ctk.CTkButton(master=masterFrame, text="Untrack", command= lambda x=player["discriminator"]: self.system.untrackPlayer(x))
+            untrackButton.grid(row=0, column=1, sticky="nswe")
+            masterFrame.grid(row=i, column=1, sticky="nswe", padx=2, pady=2)
+
+        scrollbar.columnconfigure(0, minsize=10, weight=1)
+        scrollbar.columnconfigure(1, weight=4, minsize=200)
+        scrollbar.columnconfigure(2, minsize=10, weight=1)
+
+        scrollbar.grid(row=0, column = 0, sticky = "nswe")
 
     def createTournaments(self):
         print("hey im creating some frames")
@@ -268,7 +306,7 @@ class UI:
         tabsFrame.columnconfigure(2,minsize=160, weight=0)
         tabsFrame.columnconfigure(3,minsize=220, weight=0)
         tabsFrame.columnconfigure(4,minsize=80, weight=0)
-        tabsFrame.rowconfigure(0, minsize=60, weight=1)
+        tabsFrame.rowconfigure(0, minsize=60, weight=0)
         tabsFrame.grid(row=0, column=0, padx=[40,60], sticky="nwe")
         tabsFrame.grid_propagate(False)
         for i, tournament in enumerate(tournaments):
@@ -283,7 +321,7 @@ class UI:
         scrollbar.grid(row=1, column=0, padx=30, sticky="nswe")
         tournamentsFrame.rowconfigure(1, minsize=200, weight=1)
         tournamentsFrame.columnconfigure(0, minsize=300, weight=1)
-        tournamentsFrame.rowconfigure(0, minsize=30, weight=0)
+        tournamentsFrame.rowconfigure(0, minsize=40, weight=0)
         print("should be done now")
 
 
