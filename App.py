@@ -13,9 +13,9 @@ class App:
         self.startgg = startggInterface(self)
         self.writer = Exporter(self)
         tracklist = self.startgg.trackedPlayers.getTracklist()
-        print(tracklist)
+        
         self.tracklistInfo = self.startgg.playerList.getPlayers(tracklist)
-        print(self.tracklistInfo)
+        
         self.tournamentsInfo = self.startgg.events.getEvents()
         self.UI.createTracklist()
 
@@ -54,6 +54,9 @@ class App:
 
     def getTracklist(self):
         self.startgg.getTrackedPlayers()
+
+    def getTrackedDiscriminators(self):
+        return self.startgg.trackedPlayers.getSetCheck()
 
     def updateTracklist(self):
         self.UI.createTracklist()

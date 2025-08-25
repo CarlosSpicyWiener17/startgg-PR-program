@@ -3,20 +3,7 @@ from startggModules.errors import *
 import logging
 
 logger = logging.getLogger("my_app")
-logger.setLevel(logging.DEBUG)
 
-error_handler = logging.FileHandler("error.log")
-error_handler.setLevel(logging.ERROR)
-error_format = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
-error_handler.setFormatter(error_format)
-
-info_handler = logging.FileHandler("info.log")
-info_handler.setLevel(logging.INFO)
-info_format = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
-info_handler.setFormatter(info_format)
-
-logger.addHandler(error_handler)
-logger.addHandler(info_handler)
 
 
 def setUser(entrant : dict) -> tuple[bool,dict|None]:
@@ -32,7 +19,8 @@ def setUser(entrant : dict) -> tuple[bool,dict|None]:
             user : dict | None = entrant["participants"][0]["user"]
         except:
             raise UserError(entrantId)
-        
+        if user is None:
+            raise UserIdError(entrantId)
         if user["id"] is None:
             raise UserIdError(entrantId)
         
@@ -192,10 +180,8 @@ def setOwner(tournament) -> dict | None:
 def getMainEvent(events : list, link : str) -> dict | None:
     contenders = []
     if len(events) == 1:
-        print("Just one item")
         return True, events[0]
     for event in events:
-        print("FIRST ROUND", event, link)
         try:
             
             isCasual = (event["name"].find("Casual") != -1) or (event["name"].find("casual") != -1) or (event["name"].find("CASUAL") != -1)
@@ -214,11 +200,10 @@ def getMainEvent(events : list, link : str) -> dict | None:
             logger.info(f"event[{event} error]")
     singlesEvents = []
     if len(contenders)==1:
-        print("len == 1", contenders)
+        logger.info("Only 1 passed the filter", exc_info= True)
         return True, contenders[0]
     else:
         for event in contenders:
-            print("2ND ROUND", event, link)
             isSingles = (event["name"].find("Singles") != -1) or (event["name"].find("SINGLES") != -1) or (event["name"].find("singles") != -1)
 
             if isSingles:
@@ -229,7 +214,7 @@ def getMainEvent(events : list, link : str) -> dict | None:
     if len(singlesEvents) == 1:
         return True, singlesEvents[0]
     else:
-        logger.info(f"No tournaments fit.\nLink: {link}", exc_info=True)
+        logger.info(f"Too many tournaments fit.\nLink: {link}", exc_info=True)
         return False, None
     
 
@@ -247,7 +232,6 @@ def tournamentFilter(tournament : dict) -> tuple[bool, dict | None]:
         tournamentStartAt = tournament["startAt"]
         success, tournamentMainEvent = getMainEvent(tournament["events"], tournamentLink)
         if success:
-            print("Success ", tournamentLink)
             return True, {
                 "name" : tournament["name"],
                 "id" : tournament["id"],
@@ -287,7 +271,6 @@ def allTournamentsFilter(response):
             if success:
                 filteredTournaments.append(filteredTournament)
     except:
-        print("bad response object")
-        print(response)
+        logger.error("bad response object", response, exc_info=True)
 
     return filteredTournaments

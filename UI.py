@@ -175,7 +175,7 @@ class UI:
         tournamentColor = tournamentTierColors[tournament["eventTier"]]
         
         #Creation
-        tournamentFrame = ctk.CTkFrame(master=parent, height=80)
+        tournamentFrame = ctk.CTkFrame(master=parent, height=80,)
         dateFrame = createLabelFrame(date, tournamentFrame, 80, ["#2d9f8c", "#186155"])
         dateFrame.grid(row=0, column=0,sticky="nswe", padx=2, pady=2)
 
@@ -230,7 +230,7 @@ class UI:
         trackedFrame.columnconfigure(0, weight=1)
         trackedPlayers = self.system.tracklistInfo
         for widget in trackedFrame.winfo_children():
-            widget.grid_forget()
+            widget.destroy()
 
         scrollbar = ctk.CTkScrollableFrame(master=trackedFrame)
         
@@ -257,7 +257,7 @@ class UI:
         trackedFrame.columnconfigure(0, weight=1)
         trackedPlayers = self.system.tracklistInfo
         for widget in trackedFrame.winfo_children():
-            widget.grid_forget()
+            widget.destroy()
 
         scrollbar = ctk.CTkScrollableFrame(master=trackedFrame)
         
@@ -285,7 +285,7 @@ class UI:
         tournamentsFrame = self.mainTabs["tabs"]["Tournaments"]
         tournaments = self.system.tournamentsInfo
         for widget in tournamentsFrame.winfo_children():
-            widget.grid_forget()
+            widget.destroy()
         #Creation
         scrollbar = ctk.CTkScrollableFrame(master=tournamentsFrame)
         tabsFrame = ctk.CTkFrame(master=tournamentsFrame)
@@ -316,7 +316,7 @@ class UI:
             lastIndex = 0
             for i, tournament in enumerate(tournaments[(self.currentPage-1)*50:self.currentPage*50]):
                 singleFrame = self._createSingleTournamentFrame(tournament, scrollbar)
-                singleFrame.grid(row=i, column = 0, sticky="nswe")
+                singleFrame.grid(row=i, column = 0, padx=2, pady= 2,sticky="nswe")
                 lastIndex = i
             pageFrame = ctk.CTkFrame(master=scrollbar)
             prevButton, nextButton = ctk.CTkButton(master=pageFrame, text="Prev page", command= lambda: self.changeTPage(-1) ), ctk.CTkButton(master=pageFrame, text="Next page", command= lambda: self.changeTPage(1) )
@@ -326,7 +326,7 @@ class UI:
         else:
             for i, tournament in enumerate(tournaments[(self.currentPage-1)*50:self.currentPage*50]):
                 singleFrame = self._createSingleTournamentFrame(tournament, scrollbar)
-                singleFrame.grid(row=i, column = 0, sticky="nswe")
+                singleFrame.grid(row=i, column = 0, padx=2, pady= 2,sticky="nswe")
             
 
         scrollbar.columnconfigure(0, weight=1)

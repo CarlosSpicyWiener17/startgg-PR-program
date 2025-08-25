@@ -32,8 +32,8 @@ class AllPlayers(Database):
             "tournamentId" : newPlayer["tournamentId"],
             "placement" : newPlayer["placement"] 
         }
-        self._appendToItemKey("players", "discriminator", newPlayer["discriminator"], ["tournaments"], tournamentInfo)
-        self._appendToItemKey("players", "discriminator", newPlayer["discriminator"], ["setOfEntrantIds"], tournamentInfo["entrantId"])
+        self._appendToItemKey("players", "discriminator", newPlayer["discriminator"], "tournaments", tournamentInfo)
+        self._appendToItemKey("players", "discriminator", newPlayer["discriminator"], "setOfEntrantIds", tournamentInfo["entrantId"])
 
 
     def getPlayers(self, discriminators = None):
@@ -42,23 +42,17 @@ class AllPlayers(Database):
         else:
             players = []
             for discriminator in discriminators:
-                print(discriminator)
                 success, gotPlayer = self.getPlayerFromDiscriminator(discriminator)
                 if success:
-                    print("suc")
                     players.append(gotPlayer)
         return players
 
     def getPlayerFromDiscriminator(self, discriminator):
         #Get player from startgg discriminator
         if self.playerStored(discriminator):
-            print("1")
             for player in self.getPlayers():
-                print("2")
                 if player["discriminator"] == discriminator:
-                    print("3")
                     return True, player
-        print("NOT A SUCC")
         return False, None
 
     def addPlayer(self, newPlayer, entrant):
@@ -79,21 +73,19 @@ class AllPlayers(Database):
         try:
             if newPlayer["discriminator"] in setOfDiscriminators:
                 return 0
-            print("tourneyinfo")
             if entrant:
                 tournamentInfo = {
                     "entrantId" : newPlayer["entrantId"],
                     "tournamentId" : newPlayer["tournamentId"],
                     "placement" : newPlayer["placement"] 
                 }
-                print("playfilter")
                 newPlayerFiltered = {
                     "name" : newPlayer["name"],
                     "userId" : newPlayer["userId"],
                     "discriminator" : newPlayer["discriminator"],
                     "link" : newPlayer["link"],
-                    "tournaments" : [tournamentInfo],
-                    "setOfEntrantIds" : {tournamentInfo["entrantId"]}
+                    "tournaments" : list(tournamentInfo),
+                    "setOfEntrantIds" : set(tournamentInfo["entrantId"])
                 }
             else:
                 newPlayerFiltered = {

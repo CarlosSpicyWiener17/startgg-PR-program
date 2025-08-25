@@ -5,20 +5,7 @@ import gzip
 import os
 
 logger = logging.getLogger("my_app")
-logger.setLevel(logging.DEBUG)
 
-error_handler = logging.FileHandler("error.log")
-error_handler.setLevel(logging.ERROR)
-error_format = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
-error_handler.setFormatter(error_format)
-
-info_handler = logging.FileHandler("info.log")
-info_handler.setLevel(logging.INFO)
-info_format = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
-info_handler.setFormatter(info_format)
-
-logger.addHandler(error_handler)
-logger.addHandler(info_handler)
 
 def getAllowedDatatypes(subDatabase):
     allowedDatatypes = set()
@@ -147,7 +134,6 @@ class Database:
         
     def _updateMultipleDict(self, key, identifierKey, additions):
         try:
-            print("within")
             if self._structure.get(key) is None:
                 raise KeyError
             subDatabase = self._structure[key]
@@ -299,6 +285,7 @@ class Database:
 
             #Check if the structure is iterable, meaning it has multiple valid datatypes 
             for item in self.activeDatabase[databaseKey]:
+
                 if condition(item[valueKey]):
                     retrievedItems.append(item)
         except (KeyError, InnerKeyError, TypeError, InnerTypeError):
@@ -575,9 +562,9 @@ class Database:
             try:
                 for i, item in enumerate(self.activeDatabase[databaseKey]):
                     if item[identifierKey] == identifierValue:
-                        if hasattr(subDatabase[0], "append"):
+                        if hasattr(dictStructure[valueToChangeKey], "append"):
                             self.activeDatabase[databaseKey][i][valueToChangeKey].append(addition)
-                        elif hasattr(subDatabase[0], "add"):
+                        elif hasattr(dictStructure[valueToChangeKey], "add"):
                             self.activeDatabase[databaseKey][i][valueToChangeKey].add(addition)
                         else:
                             raise KeyError
@@ -586,11 +573,11 @@ class Database:
             except:
                 success = False
             if not success:
-                raise UpdateError(identifierKey=identifierKey, identifierValue=identifierValue, valueToChangeKey=valueToChangeKey, newValue=addition)
+                raise UpdateError(message=f"{databaseKey}, {identifierKey}, {valueToChangeKey}",identifierKey=identifierKey, identifierValue=identifierValue, valueToChangeKey=valueToChangeKey, newValue=addition)
         except (TypeError, InnerTypeError, KeyError, InnerKeyError):
             logger.error("Complicated error", exc_info=True)
         except UpdateError:
-            print("Error when updating dict")
+            logger.error("Error when updating dict", exc_info=True)
         except:
             logger.error("Unknwon error", exc_info=True)
         

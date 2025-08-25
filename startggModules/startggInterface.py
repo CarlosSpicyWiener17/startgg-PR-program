@@ -60,7 +60,7 @@ class startggInterface:
             self.events.addEvents(eventsToAdd)
             logging.info("Adding new entrants")
             for i, tournament in enumerate(eventsToAdd):
-                print(i+1, " tournament of ", len(eventsToAdd))
+                logger.info(f"Tournament {i+1} of {len(eventsToAdd)}", exc_info=True)
                 for entrant in tournament["mainEvent"]["entrants"]:
                     self.playerList.addPlayer(entrant, True)
 
@@ -107,7 +107,7 @@ class startggInterface:
         try:
             remainingPages = response["data"]["event"]["entrants"]["pageInfo"]["totalPages"]-1
         except:
-            print(response)
+            logger.error("Error with startgg", response, exc_info=True)
             quit()
 
         for i in range(remainingPages):
@@ -154,9 +154,11 @@ class startggInterface:
             return None
     
     def getTrackedPlayers(self):
-        print("updating tracklist")
         tracklist = self.trackedPlayers.getTracklist()
         self.system.tracklistInfo = self.playerList.getPlayers(tracklist)
+
+    def getTrackedDiscriminators(self):
+        return self.trackedPlayers.getSetCheck()
 
     def enterPlayer(self, discriminator):
         """
@@ -170,7 +172,6 @@ class startggInterface:
                 playerExist, player = self.playerList.getPlayerFromDiscriminator(discriminator)
                 if not playerExist:
                     newUser = self._userQuery(discriminator)
-                    print("ahoh")
                     player = {
                         "name" : newUser["name"],
                         "discriminator" : newUser["discriminator"],
@@ -181,9 +182,8 @@ class startggInterface:
                     }
                 status = self.playerList.addPlayer(player, False)
                 if status==-1:
-                    print("error")
-                elif status==0:
-                    print("player existed")
+                    logger.error("error", player, exc_info=True)
+
                 self.trackedPlayers.addTrackedPlayer(player)
                 return 1
             except:
@@ -226,7 +226,7 @@ class startggInterface:
 
     def getTournaments(self, start, end):
         with self.system.startggLock:
-            print("about to check these tourneys bro")
+            logger.info("about to check these tourneys bro")
             self.system.tournamentsInfo = self._queryTournaments(start, end)
 
         if t.main_thread().is_alive():
@@ -236,20 +236,20 @@ class startggInterface:
 
     def save(self):
         with self.system.databaseLock:
-            print("Saving tournaments")
+            logger.info("Saving tournaments")
             self.events.saveEvents()
-            print("Entrants")
+            logger.info("Entrants")
             self.playerList.savePlayers()
-            print("Tracked players")
+            logger.info("Tracked players")
             self.trackedPlayers.saveTracklist()
-            print("All saved up")
+            logger.info("All saved up")
 
     def _queryTournaments(self, after, before):
         """
         Function getting processed, and processing un-processed tournaments, and returns in correct format
         after, before are timestamps
         """
-        print("Checking for tournaments")
+        logger.info("Checking for tournaments")
         #if there are gaps in previous searches, search all tournament ids within the specified timeframe
         tournamentsToProcess = []
         if not self.events.isWithinTime(after, before):
@@ -267,24 +267,24 @@ class startggInterface:
         ranked=None
         allTournaments = predoneTournaments
         tournamentsToQuery = []
-        print("Length of tournaments with predones", len(allTournaments))
+        logger.info(f"Length of tournaments with predones {len(allTournaments)}")
         for tournament in tournamentsToProcess:
             if not tournament["id"] in predoneEventIds:
                 tournamentsToQuery.append(tournament)
         if not tournamentsToProcess == []:
-            print("How many tournaments to process: ", len(tournamentsToQuery))
-            print("Querying tournaments")
+            logger.info(f"How many tournaments to process: {len(tournamentsToQuery)}")
+            logger.info("Querying tournaments")
             filled = self._fillEventEntrants(tournamentsToQuery, predoneEventIds)
             ranked = rankTournamentTiers(filled, self.trackedPlayers.getSetCheck())
             allTournaments.extend(ranked)
         else:
-            print("All tournaments are stored")
+            logger.info("All tournaments are stored")
         if not ranked is None:
-            print("adding events")
+            logger.info("adding events")
             ranked.sort(key=lambda x: x["startAt"], reverse=True)
             t.Thread(target=lambda: self.addEvents(ranked), daemon=False).start()
         allTournaments.sort(key=lambda x: x["startAt"])
-        print("Got all the tournaments o7")
+        logger.info("Got all the tournaments o7")
         return allTournaments
     
     def saveEvents(self):
@@ -308,8 +308,6 @@ def tournamentTier(tournament, trackSet):
         tournament["totalScore"] = totalScore
 
         #Give tier based on totalscore. Note: Regional, Major, OOR Major are only set manually
-        if totalScore > 1:
-            print("Has score enough")
         if totalScore >=18:
             eventTier = "18+"
         elif totalScore >=10:

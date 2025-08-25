@@ -118,8 +118,8 @@ class Event_db(Database):
         """
         Gets all, already processed, tournaments, within given timeframe
         """
-        isWithinDates = self._conditionalGetDictItems("events", "startAt", lambda eventStartAt: after <= eventStartAt and eventStartAt <= before)
-        
+        isWithinDates = self._conditionalGetDictItems("events", "startAt", lambda eventStartAt, a=after, b=before: a <= eventStartAt and eventStartAt <= b)
+        print("is withing dates: ", isWithinDates)
         return [event["id"] for event in isWithinDates]
     
     def isWithinTime(self, after, before):

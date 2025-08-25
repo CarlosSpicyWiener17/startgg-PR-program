@@ -20,15 +20,7 @@ To do next:
             xlsx writer section:
                 #COMPLETE # page 1: TRACKLIST is every tracked player in following format                    
 
-                page 2: S(#season)B is every tournament in following format
-                    Date    |   Tournament   |   T. Players     |   Bracket Size    |   Points   |   Link    |   Notable Placements
-                                                                                      1 point for                Best to worst placements
-                                                                                      each T. player                of T. Players
-                                                                                     and 0/1/2
-                                                                                     attendee bonus
-                                                                                     for <40/40+/55+
-                                                                                     players
-                Row format is the event tier color from Date to Link
+                #COMPLETE page 2: S(#season)B is every tournament in following format
 
                 page 3: S(#season)C is every tracked player in following format
                     Player  |   Notable placements  |   Notable Wins    |   Losses

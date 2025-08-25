@@ -2,6 +2,16 @@ import xlsxwriter as xl
 from xlsxwriter.color import Color
 import os
 
+def addSuffix(number):
+    """
+    Adds the appropriate ordinal suffix (st, nd, rd, th) to a number
+    """
+    if 11 <= number % 100 <= 13:
+        return str(number) + "th"
+    else:
+        suffix = {1: "st", 2: "nd", 3: "rd"}.get(number % 10, "th")
+        return str(number) + suffix
+
 class Exporter:
 
     def __init__(self, system):
@@ -13,15 +23,18 @@ class Exporter:
         return os.path.join(self.script_dir, itemName+".xlsx")
         
     def export(self, seasonNumber):
+        self.number = seasonNumber
         self.workbook = xl.Workbook(self._getFilepath(seasonNumber))
-        self.createTracklist(self.workbook)
-        """self.createBrackets(self.workbook)
-        self.createCompetitors(self.workbook)
-        self.createH2H(self.workbook)"""
+
+        self.createTracklist()
+        self.createBrackets()
+        """self.createCompetitors()
+        self.createH2H()"""
         self.workbook.close()
 
-    def createTracklist(self, workbook: xl.Workbook):
+    def createTracklist(self):
         self.system.getTracklist()
+        workbook = self.workbook
         tracklist = self.system.tracklistInfo
         trackSheet = workbook.add_worksheet("Tracklist")
         blacked = workbook.add_format({"bg_color" : Color("#000000")})
@@ -52,3 +65,54 @@ class Exporter:
             trackSheet.write(2+i, 7, "", blacked)
         
         return trackSheet
+
+    def createBrackets(self):
+        workbook = self.workbook
+        tournaments = self.system.tournamentsInfo
+        tracklist = self.system.getTrackedDiscriminators()
+        tabFormat = workbook.add_format({"valign":"center", "bold" : True, "bg_color" : "#aaaaaa"})
+
+        trackSheet = workbook.add_worksheet(f"S{self.number}B")
+        trackSheet.set_column(0,0,8)
+        trackSheet.set_column(1,1,40)
+        trackSheet.set_column(2,4,15)
+        trackSheet.set_column(5,5,30)
+        trackSheet.set_column(6,6,50)
+        trackSheet.write(0,0, "Date", tabFormat)
+        trackSheet.write(0,1, "Tournament", tabFormat)
+        trackSheet.write(0,2, "T. Players", tabFormat)
+        trackSheet.write(0,3, "Bracket Size", tabFormat)
+        trackSheet.write(0,4, "Total Points", tabFormat)
+        trackSheet.write(0,5, "Link", tabFormat)
+        trackSheet.write(0,6, "Notable Placements", tabFormat)
+        index = 0
+        tourneyFormats = {
+        "2-3" : {"bg_color" : "#ffffff", "font_color" : "#000000", "border" : 1},
+        "4-6" : {"bg_color" : "#60b66f", "font_color" : "#000000", "border" : 1},
+        "7-9" : {"bg_color" : "#5e7ce0", "font_color" : "#000000", "border" : 1},
+        "10-17" : {"bg_color" : "#7954a3", "font_color" : "#000000", "border" : 1},
+        "18+" : {"bg_color" : "#d852ab", "font_color" : "#000000", "border" : 1},
+        "Regional" : {"bg_color" : "#aaaaaa", "font_color" : "#000000", "border" : 1},
+        "Major" : {"bg_color" : "#e70f0f", "font_color" : "#FFFFFF", "border" : 1},
+        "OOR Major" :{"bg_color" : "#f1dc7b", "font_color" : "#000000", "border" : 1}
+    }   
+        borderFormat = workbook.add_format({"border" : 1})
+        borderFormat.set_text_wrap()
+        for i, tournament in enumerate(tournaments):
+            if not tournament["counting"]:
+                continue
+            tourneyFormat = workbook.add_format(tourneyFormats[tournament["eventTier"]])
+            trackSheet.write(1+index,0,tournament["date"])
+            trackSheet.write(1+index,1,tournament["name"], tourneyFormat)
+            trackSheet.write(1+index,2,tournament["trackedScore"], tourneyFormat)
+            trackSheet.write(1+index,3,tournament["attendeeAmount"], tourneyFormat)
+            trackSheet.write(1+index,4,tournament["totalScore"], tourneyFormat)
+            trackSheet.write(1+index,5,tournament["link"], tourneyFormat)
+            notable = ""
+            for entrant in tournament["mainEvent"]["entrants"]:
+                if not entrant["discriminator"] in tracklist:
+                    continue
+                notable+=f"{entrant["name"]} ({addSuffix(entrant["placement"])}), "
+            trackSheet.write(1+index, 6, notable, borderFormat)
+            index+=1
+        
