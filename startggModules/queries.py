@@ -68,44 +68,120 @@ query tournament($page: Int!, $ids: [ID!], $after: Timestamp!, $before: Timestam
   }
 }"""
 
-getTournamentsEntrants = """
-query tournament($page: Int!, $ids: [ID!], $entrantPage: Int!, $entrantPerPage: Int!, $eventIds: [ID!]) {
+getAllTournamentsNO = """
+query tournament($page: Int!, $ids: [ID!], $after: Timestamp!, $before: Timestamp!) {
   tournaments(query: {
   	page: $page
     perPage: 50
     
     #filters for US Washinton, Ultimate, and date
     filter: {
-    	ids: $ids
+    	countryCode: "NO"
+      videogameIds: $ids
+      past: true
+      afterDate: $after
+      beforeDate: $before
+      hasOnlineEvents: false
     }
   }) {
     #get total tournaments, and amount of pages
     pageInfo {
-      page
+      total
       totalPages
     }
     nodes {
       #id, name, slug for constructing links, numAttendees for score bonus
       id
+      name
+      slug
+      numAttendees
+      state
+      startAt
       #events
       events(
         limit: 0,
         filter: {
           #only ultimate, and type 1 is singles
-          ids: $eventIds
-          videogameId: [1386]
+          videogameId: $ids
+          type: 1
         }
       ) {
         #event id, and name for checking if it contains "singles"
         id
         name
         state
-        entrants(query: {
-          page: $entrantPage
-          perPage: $entrantPerPage
-        }) {
-          nodes {
-            id
+      }
+      #owner for verification its a valid WWA PR TO responsible
+      owner {
+        #gamertag for anonymity
+        player {
+          gamerTag
+        }
+        #discriminator and id
+        discriminator
+        id
+      }
+    }
+  }
+}"""
+
+setsInTournament = """
+query sets($id: ID!, $page: Int!, $entrantIds: [ID!]) {
+  event(id: $id) {
+    sets(
+      page: $page
+      perPage: 200
+      filters: {
+        entrantIds: $entrantIds
+      }
+    ){
+      pageInfo {
+        total
+        totalPages
+      }
+      nodes {
+        slots {
+          standing {
+            placement
+            entrant { 
+              id
+            }
+          }
+        }
+      }
+    }
+  }
+}"""
+
+getTournamentEntrants = """
+query slugEvent($page: Int!, $slug: String!) {
+  event(slug: $slug) {
+    id
+    name
+    state
+    tournament{
+      name
+      id
+      state
+      slug
+      startAt
+      owner {
+        id
+        discriminator
+        player {
+          gamerTag
+        }
+      }
+    }
+    entrants(query: {
+      page: $page
+      perPage: 100
+    }) {
+      pageInfo {
+        totalPages
+      }
+      nodes {
+        id
         standing {
           placement
         }
@@ -114,13 +190,9 @@ query tournament($page: Int!, $ids: [ID!], $entrantPage: Int!, $entrantPerPage: 
           user {
             id
             discriminator
-            slug
-          }
-        }
           }
         }
       }
-      #owner for verification its a valid WWA PR TO responsible
     }
   }
 }
@@ -147,7 +219,6 @@ query events($id: ID!, $page: Int!) {
           user {
             id
             discriminator
-            slug
           }
         }
       }

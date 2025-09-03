@@ -19,14 +19,14 @@ def setUser(entrant : dict) -> tuple[bool,dict|None]:
             user : dict | None = entrant["participants"][0]["user"]
         except:
             raise UserError(entrantId)
+        if user["discriminator"] is None:
+
+            raise UserDiscriminatorError(entrantId)
         if user is None:
             raise UserIdError(entrantId)
         if user["id"] is None:
             raise UserIdError(entrantId)
         
-        if user["discriminator"] is None:
-
-            raise UserDiscriminatorError(entrantId)
         
         #IF SUCCESS
         return True, {
@@ -35,22 +35,34 @@ def setUser(entrant : dict) -> tuple[bool,dict|None]:
                 "link" : "https://www.start.gg/user/"+user["discriminator"]
             }
     #These errors are fine enough
-    except (UserError, UserIdError, UserDiscriminatorError):
-        logger.info("Issue with entrant in tournament", exc_info=True)
+    except UserDiscriminatorError:
+        logger.error(f"Entrant has no user at all")
+        return True, {
+            "id" : None,
+            "discriminator" : None,
+            "link" : None
+        }
+    except UserIdError:
+        logger.error(f"Entrant doesnt have user id: {entrant["id"]}, {user["discriminator"]}", exc_info=True)
+        return True, {
+            "id" : None,
+            "discriminator" : user["discriminator"],
+            "link" : "https://www.start.gg/user/"+user["discriminator"]
+        }
+    except UserError:
         return True, {
             "id" : None,
             "discriminator" : None,
             "link" : None
         }
     except:
-        logger.error("Error in setUser()", exc_info=True)
         return False, None
 
 def entrantFilter(entrant : dict, tournamentId: int) -> tuple[bool, dict | None]:
     """
     Safe function for filtering entrants into dicts:\n
         "Name"\t\t #startgg gamerTag
-        "userId"\t\t #startgg user id
+        "id"\t\t #startgg user id
         "discriminator"\t #startgg user discriminator
         "link"\t\t #startgg user link
         "entrantId"\t\t #tournament specific entrant id
@@ -62,35 +74,36 @@ def entrantFilter(entrant : dict, tournamentId: int) -> tuple[bool, dict | None]
 
         #set gamertag
         tournamentGamerTag : str | None = None
+        placement = None
+        try:
+            placement = entrant["standing"]["placement"]
+        except:
+            placement = None
+            return False, None
         try:
             tournamentGamerTag = entrant["participants"][0]["gamerTag"]
         except:
             logger.error(f"GamerTag not found. {entrantId}", exc_info=True)
             return False, None
         if tournamentGamerTag is None:
-            logger.error(f"GamerTag not found. {entrantId}", exc_info=True)
+            logger.error(f"GamerTag not found. {entrantId}")
             return False, None
-        
         #set user
+        
         success, user = setUser(entrant)
         if not success:
-            logger.error(f"User not found. {entrantId}", exc_info=True)
+            if not placement is None:
+                logger.error(f"User not found. {entrantId}, {entrant["participants"][0]["gamerTag"]}")
             return False, None
-        try:
-            placement = entrant["standing"]["placement"]
-        except:
-            placement = None
-            logger.info("No placement", exc_info=True)
-            return False, None
-        
         newEntrant = {
             "name" : entrant["participants"][0]["gamerTag"],
-            "userId" : user["id"],
+            "id" : user["id"],
             "discriminator" : user["discriminator"],
             "link" : user["link"],
             "entrantId" : entrantId,
             "tournamentId" : tournamentId,
-            "placement" : placement
+            "placement" : placement,
+            
         }
         return True, newEntrant
     except:
@@ -103,6 +116,7 @@ def allEntrantsFilter(response : dict, tournamentId : int) -> tuple[list, int]:
     Filters an events entrants in desired format. Returns the entrants list
     """
     filteredEntrants = []
+    
     attendeeAmount = 0
     for entrant in response["data"]["event"]["entrants"]["nodes"]:
         success, filteredEntrant = entrantFilter(entrant, tournamentId)
@@ -177,49 +191,113 @@ def setOwner(tournament) -> dict | None:
         logger.error("Unknown error. Contact", exc_info=True)
         return None
 
-def getMainEvent(events : list, link : str) -> dict | None:
+def getMainEvent(events : list, link : str, name : str) -> dict | None:
     contenders = []
     if len(events) == 1:
         return True, events[0]
+    hasNames = []
     for event in events:
         try:
-            
-            isCasual = (event["name"].find("Casual") != -1) or (event["name"].find("casual") != -1) or (event["name"].find("CASUAL") != -1)
-            redemption = (event["name"].find("redemption") != -1) or (event["name"].find("REDEMPTION") != -1) or (event["name"].find("Redemption") != -1)
-            amateur = (event["name"].find("amateur") != -1) or (event["name"].find("AMATEUR") != -1) or (event["name"].find("Amateur") != -1)
-            isRedemption = redemption or amateur
-            completed = event["state"] == "COMPLETED"
-            if (not isCasual) and (not isRedemption):
+            if event["name"].find(name) != 1:
+                hasNames.append(event)
+        except:
+            logger.info(f"error with {link}, {event["name"]}")
+    nonCasuals = []
+    if len(hasNames) > 1:
+        for event in hasNames:
+            try:
+                isCasual = (event["name"].find("Casual") != -1) or (event["name"].find("casual") != -1) or (event["name"].find("CASUAL") != -1)
+                if not isCasual:
+                    nonCasuals.append(event)
+            except:
+                logger.info(f"event[{event} error]")
+    elif len(hasNames) == 1:
+        contenders = hasNames
+    nonRedemption = []
+    if len(nonCasuals) >1:
+        for event in nonCasuals:
+            try:
+                redemption = (event["name"].find("redemption") != -1) or (event["name"].find("REDEMPTION") != -1) or (event["name"].find("Redemption") != -1)
+                amateur = (event["name"].find("amateur") != -1) or (event["name"].find("AMATEUR") != -1) or (event["name"].find("Amateur") != -1)
+                isRedemption = redemption or amateur
+                if not isRedemption:
+                    nonRedemption.append(event)
+            except:
+                logger.info(f"event[{event} error]")
+    elif len(nonCasuals) == 1:
+        contenders = nonCasuals
+    if len(nonRedemption) > 1:
+        for event in nonRedemption:
+            try:
+                completed = event["state"] == "COMPLETED"
                 if completed:
                     contenders.append(event)
-                else:
-                    raise InProgressError(link, event["name"])
-        except InProgressError:
-            logger.error("Tournament hasnt been completed", exc_info=True)
-        except:
-            logger.info(f"event[{event} error]")
+            except:
+                logger.info(f"event[{event} error]")
+    elif len(nonRedemption) == 1:
+        contenders = nonRedemption
     singlesEvents = []
     if len(contenders)==1:
-        logger.info("Only 1 passed the filter", exc_info= True)
         return True, contenders[0]
     else:
         for event in contenders:
             isSingles = (event["name"].find("Singles") != -1) or (event["name"].find("SINGLES") != -1) or (event["name"].find("singles") != -1)
-
-            if isSingles:
+            completed = event["state"] == "COMPLETED"
+            if isSingles and completed:
                 singlesEvents.append(event)
     if singlesEvents == []:
-        logger.info(f"No tournaments fit.\nLink: {link}", exc_info=True)
+        logger.info(f"No tournaments fit.\nLink: {link}\n")
         return False, None
-    if len(singlesEvents) == 1:
-        return True, singlesEvents[0]
-    else:
-        logger.info(f"Too many tournaments fit.\nLink: {link}", exc_info=True)
-        return False, None
-    
+    try:
+        if len(singlesEvents) == 1:
+            completed = singlesEvents[0]["state"] == "COMPLETED"
+            if not completed:
+                raise InProgressError(link, singlesEvents[0]["name"])
+            return True, singlesEvents[0]
+        else:
+            logger.info(f"Too many tournaments fit.\nLink: {link}")
+            return False, None
+    except InProgressError:
+        logger.error("Tournament hasnt been completed", exc_info=True)
+    except:
+        logger.error(f"Tournament getMainEvent unknown error:\n {link}", exc_info=True)
+
 
     
-    
+def tournamentFilterNoMain(tournament : dict) -> tuple[bool, dict | None]:
+    """
+    Safe function to get startgg tournament info:\n
+
+    """
+    try:
+        #If these dont work i dont even know. Should always work
+        tournamentLink = "https://www.start.gg/"+tournament["slug"]
+        tournamentStartAt = tournament["startAt"]
+        
+        return True, {
+            "name" : tournament["name"],
+            "id" : tournament["id"],
+            "state" : tournament["state"],
+            "Owner" : setOwner(tournament),
+            "link" : tournamentLink,
+            "mainEvent" : dict(),
+            "attendeeAmount" : 0,
+            "attendeeBonus" : 0,
+            "trackedScore" : 0,
+            "totalScore" : 0,
+            "eventTier" : "None",
+            "startAt" : tournamentStartAt,
+            "date" : toDate(tournamentStartAt),
+            "counting" : True
+        }
+
+        
+    except EventMissingError:
+        logger.info("None of the events matches requirements for singles", exc_info=True)
+        return False, None
+    except:
+        logger.error("Unknown error", exc_info=True)
+        return False, None
 
 def tournamentFilter(tournament : dict) -> tuple[bool, dict | None]:
     """
@@ -230,7 +308,7 @@ def tournamentFilter(tournament : dict) -> tuple[bool, dict | None]:
         #If these dont work i dont even know. Should always work
         tournamentLink = "https://www.start.gg/"+tournament["slug"]
         tournamentStartAt = tournament["startAt"]
-        success, tournamentMainEvent = getMainEvent(tournament["events"], tournamentLink)
+        success, tournamentMainEvent = getMainEvent(tournament["events"], tournamentLink, tournament["name"])
         if success:
             return True, {
                 "name" : tournament["name"],
@@ -252,7 +330,7 @@ def tournamentFilter(tournament : dict) -> tuple[bool, dict | None]:
             raise EventMissingError(tournamentLink, None)
         
     except EventMissingError:
-        logger.info("None of the events matches requirements for singles", exc_info=True)
+        logger.error("None of the events matches requirements for singles", exc_info=True)
         return False, None
     except:
         logger.error("Unknown error", exc_info=True)

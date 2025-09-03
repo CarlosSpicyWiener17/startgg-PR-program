@@ -9,13 +9,12 @@ Done:
             Entry field: Season #
             Export button: Exports to .xlsx
         Fixed tournament creation to include pages
+        Made a re-do tournament rankings button, based on current tracked Players
 ________________________________________________________________________________________
 
 To do next:
 
         To do now IMPORTANT:
-            
-            Re-do tournament rankings button, based on current tracked Players
 
             xlsx writer section:
                 #COMPLETE # page 1: TRACKLIST is every tracked player in following format                    
@@ -25,6 +24,11 @@ To do next:
                 page 3: S(#season)C is every tracked player in following format
                     Player  |   Notable placements  |   Notable Wins    |   Losses
                 Notable placements color format is event tier color
+
+                    Oops forgot i needed the sets of the tournaments for page 3 and 4. Create get sets query of all valid tournaments
+                    for now, filter only for the tracked players and only on countign tournaments
+                    proceed with page 3 after this
+
 
                 page 4: S(#season) H2H is a head 2 head table of every tracked player
                 notes: top cut is an aggregate of tracked players chosen to go into it

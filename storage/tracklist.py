@@ -7,39 +7,37 @@ trackedPlayersStructure = {
 trackedPlayersName = "TrackedPlayers"
 
 class TrackedPlayers(Database):
-    def __init__(self):
-        super().__init__(trackedPlayersName, trackedPlayersStructure)
+    def __init__(self, logger, userDir):
+        super().__init__(trackedPlayersName, trackedPlayersStructure, logger, userDir)
 
     def getTracklist(self):
-        return self._getItems("playerDiscriminators")
+        return self.get("playerDiscriminators")
     
     def isTracked(self, discriminator):
         #Checks if this discriminator is stored
-        trackedPlayers = self.getTracklist()
-        if discriminator in trackedPlayers:
+        setOfDiscriminators = self.get("playerDiscriminators")
+        if discriminator in setOfDiscriminators:
             return True
         return False
 
     def addTrackedPlayer(self, newPlayer):
-        setOfDiscriminators = self._getItems("playerDiscriminators")
+        setOfDiscriminators = self.get("playerDiscriminators")
         try:
             if newPlayer["discriminator"] in setOfDiscriminators:
                 return 0
-            self._add("playerDiscriminators", newPlayer["discriminator"])
+            self.add("playerDiscriminators", newPlayer["discriminator"])
             return 1
         except:
             return -1
         
     def removeTrackedPlayer(self, startggDiscriminator):
-        setOfDiscriminators = self._getItems("playerDiscriminators")
+        setOfDiscriminators = self.get("playerDiscriminators")
         if startggDiscriminator in setOfDiscriminators:
-            self._remove("playerDiscriminators", startggDiscriminator)
-        
-    def getSetCheck(self):
-        return self._getItems("playerDiscriminators")
+            self.activeDatabase["playerDiscriminators"].remove(startggDiscriminator)
     
     def loadTracklist(self):
         self._load_db()
+        print(self.activeDatabase)
 
     def saveTracklist(self):
         self._save_db()

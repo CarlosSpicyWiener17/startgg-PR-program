@@ -4,29 +4,85 @@ import logging
 import gzip
 import os
 
-logger = logging.getLogger("my_app")
+global logger
+global debug
+debug = False
 
+def isScalar(subDatabase):
+    return subDatabase[0] is None
 
-def getAllowedDatatypes(subDatabase):
-    allowedDatatypes = set()
-    #Check if the structure is iterable, meaning it has multiple valid datatypes
-    if type(subDatabase[1]) is str:
-        allowedDatatypes.add(str)
-    elif type(subDatabase[1]) is dict:
-        allowedDatatypes.add(dict)
-    else:
-        try:
-            for datatype in subDatabase[1]:
-                allowedDatatypes.add(datatype)
-        except:
-            allowedDatatypes.add(subDatabase[1])
-    return allowedDatatypes
+def _updateDict(dictToUpdate : dict, dictToAdd : dict) -> dict:
+    """
+    Recursively explores dicts to fill out every branch\n
+    Return the new dict\n
+    Args:
+        dictToUpdate: dictionary
+        dictToAdd: dictionary
+
+    Returns:
+        dict: everything from dictToAdd, added to each keyValue in dictToUpdate, or added if key not existing
+    """
+    global debug
+    try:    
+        newDict = dictToUpdate
+        for key, value in dictToAdd.items():
+            
+            if type(value) is dict:
+                logger.info(f"debug dict: key: {key}, value: {value}\n")
+                newValue = _updateDict(dictToUpdate[key], dictToAdd[key])
+            elif type(value) is list:
+                logger.info(f"debug list: key: {key}, value: {value}\n")
+                toUpdateList, toAddList = dictToUpdate[key], dictToAdd[key] 
+                newValue = _extendList(toUpdateList, toAddList)
+            elif type(value) is set:
+                logger.info(f"debug set: key: {key}, value: {value}\n")
+                toUpdateSet, toAddSet = dictToUpdate[key], dictToAdd[key]
+                newValue = _updateSet(toUpdateSet, toAddSet)
+            else:
+                newValue = value
+            newDict[key] = newValue
+        print("newdict", newDict)
+        return newDict
+    except:
+        logger.error(f"error in _updateDict. dictToUpdate:{dictToUpdate}, dictToAdd:{dictToAdd}", exc_info=True)
+
+def _updateSet(setToUpdate : set, setToAdd : set):
+    try:
+        newSet = setToUpdate
+        newSet.update(setToAdd)
+        return newSet
+    except:
+        logger.error(f"error in _updateSet. dictToUpdate:{setToUpdate}, dictToAdd:{setToAdd}", exc_info=True)
+
+def _extendList(listToExtend, listToAdd):
+    try:
+        newList = listToExtend
+        for item in listToAdd:
+            foundExisting = False
+            if type(item) is dict:
+                if not item.get("id") is None:
+                    for i, existingItem in enumerate(newList):
+                        if existingItem["id"] == item["id"]:
+                            foundExisting = True
+                            newList[i] = _updateDict(existingItem, item)
+                            break
+                if not foundExisting:
+                    newList.append(item)
+            else:
+                if item in listToExtend:
+                    continue
+                newValue = item
+                newList.append(newValue)
+
+        return newList
+    except:
+        logger.error(f"error in _extendList. dictToUpdate:\n{listToExtend}, \ndictToAdd:\n{listToAdd}", exc_info=True)
 
 class Database:
     """
     Base database class to customize
     """
-    def __init__(self, databaseFileName, structTemplate ):
+    def __init__(self, databaseFileName : str, structTemplate : dict, loggerToAdd, userDir):
         """
         Initializes the database
 
@@ -34,33 +90,244 @@ class Database:
         databaseFileName\t #What you want the filname to be called. Type .pkl
         structTemplate\t #structure of the database dict
         """
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        self.file_path = os.path.join(script_dir, databaseFileName+".pkl")
+        global logger
+        logger = loggerToAdd
+        self.userDir = userDir
+        self.name = databaseFileName
+        self.file_path = os.path.join(userDir, databaseFileName+".pkl")
         self._structure : dict = structTemplate
 
-    def _load_db(self):
+    def add(self, databaseKey : str, additions):
         """
-        Loads database into active memory
+        Top level function to add items to database
         """
-        if os.path.exists(self.file_path) and os.path.getsize(self.file_path) > 0:
-            with gzip.open(self.file_path, "rb") as databaseFile:
-                self.activeDatabase = load(databaseFile)   
-                databaseFile.close()
-        else:
-            self.activeDatabase = self._createStructure(self._structure)
+        global debug
+        debug=False
+        try:
 
-    def _initialiseDict(self, structure):
+            #Check if it exists
+            databaseKeyExists = not self._structure.get(databaseKey) is None
+            if not databaseKeyExists:
+                raise KeyError
+            subDatabase = self._structure[databaseKey]
+
+            if type(subDatabase[1]) is dict:
+                if debug:
+                    logger.info(f"debug: adding in {self.name}\nAdding dicts")
+                self._addDicts(databaseKey, additions)
+            else:
+                self._addScalars(databaseKey, additions)
+        except TypeError:
+            logger.error(f"{databaseKey} in {self.name} database, with additions of type {type(additions)}", exc_info=True)
+        except:
+            logger.error(f"Unknown in {self.name} database, with databasekey:{databaseKey}, additons of type:{type(additions)}\n{self._structure}", exc_info=True)
+
+    def remove(self, databaseKey : str, removables):
+        """
+        Top level function to remove items from database
+        """
+        try:
+            databaseKeyExists = not self._structure.get(databaseKey) is None
+            if not databaseKeyExists:
+                raise KeyError
+            subDatabase = self._structure[databaseKey]
+            if isScalar(removables):
+                if subDatabase[0] is set:
+                    if removables in self.activeDatabase[databaseKey]:
+                        self.activeDatabase[databaseKey].remove(item)
+                elif subDatabase[0] is list:
+                    if item is dict:
+                        for i, existingDict in self.activeDatabase[databaseKey]:
+                            if item["id"] == existingDict["id"]:
+                                self.activeDatabase[databaseKey].pop(i)
+                                break
+                    else:
+                        if item in self.activeDatabase[databaseKey]:
+                            self.activeDatabase[databaseKey].remove(item)
+            else:
+                if subDatabase[0] is set:
+                    for item in removables:
+                        if item in self.activeDatabase[databaseKey]:
+                            self.activeDatabase[databaseKey].remove(item)
+            
+                elif subDatabase[0] is list:
+                    for item in removables:
+                        if item is dict:
+                            for i, existingDict in self.activeDatabase[databaseKey]:
+                                if item["id"] == existingDict["id"]:
+                                    self.activeDatabase[databaseKey].pop(i)
+                                    break
+                        else:
+                            if item in self.activeDatabase[databaseKey]:
+                                self.activeDatabase[databaseKey].remove(item)
+                else:
+                    if type(removables) in {set, list}:
+                        raise TypeError
+                    if self.activeDatabase[databaseKey] == removables:
+                        self.activeDatabase[databaseKey] == subDatabase[0]()
+        except TypeError:
+            logger.error(f"{databaseKey} in {self.name} database, with additions of type {type(removables)}", exc_info=True)
+        except:
+            pass
+
+    def get(self, databaseKey : str, conditional = None):
+        """
+        Top level function to get items. Optional filter dict with conditional functions within
+        """
+        try:
+
+            databaseKeyExists = not self._structure.get(databaseKey) is None
+            if not databaseKeyExists:
+                raise KeyError
+
+            subDatabase = self._structure[databaseKey]
+            if subDatabase[0] is None:
+                return self._getScalar(databaseKey)
+            else:
+                if conditional is None:
+                    return self.activeDatabase[databaseKey]
+                elif not callable(conditional):
+                    raise FunctionChoiceError
+                else:
+                    return self._getIterable(databaseKey, conditional)
+        except KeyError:
+            logger.error(f"Couldnt find {self.name}[{databaseKey}] with function database.get()")
+        except FunctionChoiceError:
+            logger.error(f"Filter didnt work in {self.name} database.get")
+        except:
+            logger.error(f"Error database.get with {self.name} database, with databasekey:{databaseKey}, filters:{conditional}\n{self._structure}")
+            pass
+
+    def overWrite(self, databaseKey, newSubDatabase):
+        """
+        Force overwrite of entire database. Used in 1 function due to necessity
+        """
+        if self._structure[databaseKey][0] is None:
+            if type(newSubDatabase) in {set, list}:
+                raise TypeError
+            self.activeDatabase[databaseKey] = newSubDatabase
+        else:
+            if self._structure[databaseKey][0] is type(newSubDatabase):
+                self.activeDatabase[databaseKey] = newSubDatabase
+
+    def _getIterable(self, databasekey, conditional):
+        """
+        Get items within iterable that fulfill conditional
+        """
+        iterables = self._structure[databasekey][0]()
+        
+        if self._structure[databasekey][0] is list:
+            return [item for item in self.activeDatabase[databasekey] if conditional(item)]
+        elif self._structure[databasekey][0] is set:
+            
+            return {item for item in self.activeDatabase[databasekey] if conditional(item)}
+        else:
+            logger.error(f"Hmm hmm in {self.name} database", exc_info=True)
+
+    def _addDicts(self, databaseKey : str, additions : list[dict]):
+        """
+        Special handling needed to update keys of dicts, if dict with id already exist
+        """
+        global debug
+        try:
+            subDatabase = self._structure[databaseKey]
+            if isScalar(subDatabase):
+                if type(additions) in {set, list}:
+                    raise TypeError
+                logger.info(f"debug: adding single dict in {self.name}\nAdding {type(additions)}")
+                newDict = _updateDict(self.activeDatabase[databaseKey], additions)
+                self.activeDatabase[databaseKey] = newDict
+            elif subDatabase[0] is list:
+                if debug:
+                    logger.info(f"debug: adding dicts in {self.name}\nAdding {type(additions)}")
+                if type(additions) is list:
+                    newList = _extendList(self.activeDatabase[databaseKey], additions)
+                else:
+                    newList = _extendList(self.activeDatabase[databaseKey], [additions])
+                self.activeDatabase[databaseKey] = newList
+            else:
+                logger.error(f"unknown in {self.name} database", additions)
+            pass
+        except:
+            logger.error(f"Unknown in {self.name} database, with databasekey:{databaseKey}, additons of type:{type(additions)}", exc_info=True)
+
+    
+
+    def _addScalars(self, databaseKey : str, additions ):
+        """
+        Check if exists, then append the new ones.
+        If scalar, overwrite
+        """
+        try:
+            subDatabase = self._structure[databaseKey]
+            if isScalar(subDatabase):
+                if type(additions) in {set, list}:
+                    raise TypeError
+                self._addScalar(databaseKey, additions)
+
+            elif subDatabase[0] is list:
+                if not type(additions) is list:
+                    self._addToList(databaseKey, [additions])
+                else:
+                    self._addToList(databaseKey, additions)
+
+            elif subDatabase[0] is set:
+                if not type(additions) is set:
+                    self._addToSet(databaseKey, {additions})
+                else:
+                    self._addToSet(databaseKey, additions)
+            else:
+                logger.error(f"subDatabase[0] is not list or set?:\n{subDatabase[0]}")
+                raise Exception
+        except:
+            logger.error(f"Unknown error in {self.name}[{databaseKey}] database\n_addScalars additions:\n{additions}")
+
+    def _addScalar(self, databaseKey : str, newScalar : int | str | dict | float):
+        """
+        Overwrites a scalar with a new one
+        """
+        try:
+            scalarType = self._structure[databaseKey][1]
+            if not type(newScalar) is scalarType:
+                raise TypeError(databaseKey, newScalar)
+            self.activeDatabase[databaseKey] = newScalar
+        except TypeError:
+            logger.error(f"Invalid type of newScalar-{newScalar}, in database-{databaseKey} in {self.name}", exc_info=True)
+        except:
+            logger.error(f"Unknown error in {self.name} database, with databaseKey:{databaseKey}, newScalar:{newScalar}", exc_info=True)
+
+    def _addToList(self, databaseKey : str, additions : list[int] | list[str] | list[dict] | list[float]):
+        #Check if any additions already exist
+        try:
+            toAdd = []
+            for item in additions:
+                if not item in self.activeDatabase[databaseKey]:
+                    toAdd.append(item)
+            self.activeDatabase[databaseKey].extend(toAdd)
+        except:
+            logger.error(f"Error in {self.name} database with databasekey:{databaseKey} and additions of type:{type(additions)}")
+        
+    def _addToSet(self, databaseKey : str, additions : set[int] | set[str] | set[dict] | set[float]):
+        try:
+            toAdd = set()
+            for item in additions:
+                if not item in self.activeDatabase[databaseKey]:
+                    toAdd.add(item)
+            self.activeDatabase[databaseKey].update(toAdd)
+        except:
+            logger.error(f"Error in {self.name} database with databasekey:{databaseKey} and additions of type:{type(additions)}")
+
+    def _initialiseDict(self, structure : dict):
         """
         Recursive dict creation from structure templates
         """
         newDict = dict()
         if structure is None:
             return None
+
         for key, value in structure.items():
             if value[0] is None:
                 newDict[key] = None
-            elif value[0] is dict:
-                newDict[key] = self._initialiseDict(value[1])
             else:
                 newDict[key] = value[0]()
         return newDict
@@ -77,510 +344,6 @@ class Database:
         newDatabase = self._initialiseDict(structureTemplate)
         return newDatabase
     
-    def _add(self, databaseKey, addition):
-        """
-        Adds a single item to the key of the active database.
-        Only works on iterable sub-databases.
-        Use _overwrite for scalars.
-        Provides necessary function + typechecking per iterable and datatype
-        """
-        try:
-            if self._structure.get(databaseKey) is None:
-                raise KeyError
-            
-            subDatabase = self._structure[databaseKey]
-            allowedDatatypes = getAllowedDatatypes(subDatabase)
-            if type(addition) not in allowedDatatypes:
-                raise TypeError(addition)
-
-            #Do correct based on method available
-            if hasattr(subDatabase[0], "append"):
-                self.activeDatabase[databaseKey].append(addition)
-            elif hasattr(subDatabase[0], "add"):
-                self.activeDatabase[databaseKey].add(addition)
-            else:
-                raise KeyError
-        except (KeyError, TypeError, InnerKeyError, InnerTypeError):
-            logger.error("_add error", exc_info=True)
-        except:
-            logger.error("Unknown _add error", exc_info=True)
-
-    def _addDict(self, databaseKey, addition):
-        """
-        Adds a single dict to the key of the active database.
-        Only works on iterable sub-databases.
-        Use _overwrite for scalars.
-        Provides necessary function + typechecking per iterable and datatype
-        """
-        try:
-            if self._structure.get(databaseKey) is None:
-                raise KeyError
-            if type(addition) is not dict:
-                raise FunctionChoiceError
-            
-            subDatabase = self._structure[databaseKey]
-
-            #Do correct based on method available
-            if hasattr(subDatabase[0], "append"):
-                self.activeDatabase[databaseKey].append(addition)
-            elif hasattr(subDatabase[0], "add"):
-                self.activeDatabase[databaseKey].add(addition)
-            else:
-                raise KeyError
-        except (KeyError, TypeError, InnerKeyError, InnerTypeError):
-            logger.error("_addDict error", exc_info=True)
-        except:
-            logger.error("Unknown _addDict error", exc_info=True)
-        
-    def _updateMultipleDict(self, key, identifierKey, additions):
-        try:
-            if self._structure.get(key) is None:
-                raise KeyError
-            subDatabase = self._structure[key]
-
-            if type(additions) is dict:
-                raise FunctionChoiceError
-
-            if len(additions) < 1:
-                raise Exception
-            
-            dictStructure = subDatabase[1]
-            if dictStructure.get(identifierKey) is None:
-                raise InnerKeyError
-            
-            #Check for correct types
-            allowedDatatypesItems = getAllowedDatatypes(subDatabase)
-            if not type(additions[0]) in allowedDatatypesItems:
-                raise TypeError
-            if type(additions) is not subDatabase[0]:
-                raise TypeError
-
-            toAdd = additions
-
-            #Do correct based on method available
-            self._overwrite(key, toAdd)
-
-        except (KeyError, TypeError, InnerKeyError, FunctionChoiceError, InnerTypeError):
-            logger.error("_addMultiple error", exc_info=True)
-        except:
-            logger.error("Unknown _addMultiple error", exc_info=True)
-
-    def _addMultiple(self, key, additions : set):
-        """
-        Adds a single item to the key of the active database.
-        Provides necessary function + typechecking per iterable and datatype
-        """
-        try:
-            if self._structure.get(key) is None:
-                raise KeyError
-            subDatabase = self._structure[key]
-
-            if type(additions) is dict:
-                raise FunctionChoiceError
-
-            if len(additions) < 1:
-                raise Exception
-            #Check for correct types
-            allowedDatatypesItems = getAllowedDatatypes(subDatabase)
-            if type(list(additions)[0]) not in allowedDatatypesItems:
-                raise TypeError
-            if type(additions) is not subDatabase[0]:
-                raise TypeError
-            #Do correct based on method available
-            for addition in additions:
-                self._add(key, addition)
-        except (KeyError, TypeError, InnerKeyError, FunctionChoiceError, InnerTypeError):
-            logger.error("_addMultiple error", exc_info=True)
-        except:
-            logger.error("Unknown _addMultiple error", exc_info=True)
-    
-    def getDatabase(self):
-        """
-        Returns entire database
-        """
-        return self.activeDatabase
-
-    def _getItems(self, databaseKey):
-        """
-        Gives all items from within a subdatabase
-        """
-        if self._structure.get(databaseKey) is None:
-            raise KeyError
-        
-        return self.activeDatabase[databaseKey]
-
-    def _getItemFromKeyValue(self, databaseKey, valueKey, value) -> any:
-        """
-        Gives first item which matches value in database[databaseKey][x][valueKey]
-        """
-        try:
-            if self._structure.get(databaseKey) is None:
-                raise KeyError(f"Wrong key: {databaseKey}")
-            
-            subDatabase = self._structure[databaseKey]
-            #Only for dicts
-            if type(subDatabase[0]) is not type(dict):
-                raise TypeError
-            
-            #If key nonexist
-            if subDatabase[1].get(valueKey) is None:
-                raise InnerKeyError(f"Wrong key: {valueKey} in {subDatabase}")
-            success = False
-
-            #Loop through. Give success if looped through without errors. Return item | None
-            try:
-                for item in self.activeDatabase[databaseKey]:
-                    if item[valueKey] == value:
-                        retrievedItem = item
-                        break
-                success = True
-            except:
-                success, retrievedItem = False, None
-            if not success:
-                raise
-            return retrievedItem
-        except (TypeError, InnerTypeError, KeyError, InnerKeyError):
-            logger.error("Error within _getItemFromKeyValue", exc_info=True)
-        except:
-            logger.error("Unknown error within _getItemFromkeyValue", exc_info=True)
-        return None
-
-        
-    def _overwrite(self, databaseKey, newSubDatabase):
-        """
-        Overwrites entire key. Be certain in what function you use this in
-        """
-        try:
-            if self._structure.get(databaseKey) is None:
-                raise KeyError(f"Wrong key: {databaseKey}")
-            subDatabase = self._structure[databaseKey]
-
-            if subDatabase[0] is not type(newSubDatabase):
-                raise TypeError
-            self.activeDatabase[databaseKey] = newSubDatabase
-        except (KeyError, InnerKeyError, TypeError, InnerTypeError):
-            logger.error("Issue with _overwrite", exc_info=True)
-        except:
-            logger.error("Unknown issue with _overwrite", exc_info=True)
-
-
-    def _conditionalGetDictItems(self, databaseKey, valueKey, condition):
-        try:
-            #Check subdatabase exists
-            if self._structure.get(databaseKey) is None:
-                raise KeyError(f"Wrong key: {databaseKey}")
-            subDatabase = self._structure[databaseKey]
-            
-            #Check if key is correct assuming the calling function is setup correctly
-            if type(subDatabase[0]) is not type(dict):
-                raise TypeError(f"Wrong type of target: {subDatabase[0]}")
-            if subDatabase[1].get(valueKey) is None:
-                raise InnerKeyError(f"Wrong key: {valueKey}")
-            
-            #Check if condition is a function
-            if not callable(condition):
-                raise ConditionError
-            
-            retrievedItems = []
-
-            #Check if the structure is iterable, meaning it has multiple valid datatypes 
-            for item in self.activeDatabase[databaseKey]:
-
-                if condition(item[valueKey]):
-                    retrievedItems.append(item)
-        except (KeyError, InnerKeyError, TypeError, InnerTypeError):
-            logger.error("Issue with _conditionalGetDictItems", exc_info=True)
-        except ConditionError:
-            logger.error("Condition was not callable", exc_info=True)
-        return retrievedItems
-
-    
-
-    def _remove(self, databaseKey, removal):
-        """
-        Removes a single item from the key of the active database.
-        Provides necessary function + typechecking per iterable and datatype
-        """
-        try:
-            if self._structure.get(databaseKey) is None:
-                raise KeyError(f"Error with key: {databaseKey}")
-            
-            subDatabase = self._structure[databaseKey]
-            
-            allowedDatatypes = getAllowedDatatypes(subDatabase)
-            
-            if type(removal) not in allowedDatatypes:
-                raise TypeError
-            
-            #Do correct based on method available
-            if hasattr(subDatabase[0], "remove"):
-                self.activeDatabase[databaseKey].remove(removal)
-            elif hasattr(subDatabase[0], "pop") and type(subDatabase) is type(dict):
-                self.activeDatabase[databaseKey].pop(removal)     #remove assuming removal is key instead 
-            else:
-                raise Exception(databaseKey, removal)
-        except:
-            logger.error("_remove", exc_info=True)
-
-    def _removeDict(self, databaseKey, identifierKey, identifierValue):
-        """
-        Removes an item based on key, value pair within a dict item
-        """
-
-        if self._structure.get(databaseKey) is None:
-            raise KeyError(f"Error with key: {databaseKey}")
-        
-        subDatabase = self._structure[databaseKey]
-        dictStructure = subDatabase[1]
-        if dictStructure.get(identifierKey) is None:
-            raise KeyError(f"Error with key: {identifierKey}")
-        
-        allowedDatatypes = getAllowedDatatypes(subDatabase)
-        
-        if type(identifierValue) not in allowedDatatypes:
-            raise TypeError
-
-        try:
-            for item in self.activeDatabase[databaseKey]:
-                if item[identifierKey] == identifierValue:
-                    success = True
-                    self.activeDatabase[databaseKey].remove(item)
-            success = True
-        except:
-            success = False
-        if success:
-            return True
-        return False
-        
-    def _addToIterableInDict(self, databaseKey, changeKey, addition):
-        try:
-            #Check if databaseKey exists
-            if self._structure.get(databaseKey) is None:
-                raise KeyError(f"Error with key: {databaseKey}")
-            
-            subDatabase = self._structure[databaseKey]
-            if subDatabase[0] is not dict:
-                raise InnerTypeError
-            
-            subDictStructure = subDatabase[1]
-            if subDictStructure.get(changeKey) is None:
-                raise KeyError(f"Error with key: {changeKey}")
-
-            allowedDatatypesChange = getAllowedDatatypes(subDictStructure[changeKey])
-            if not type(addition) in allowedDatatypesChange:
-                raise TypeError
-
-            if hasattr(self.activeDatabase[databaseKey][changeKey], "append"):
-                self.activeDatabase[databaseKey][changeKey].append(addition)
-            if hasattr(self.activeDatabase[databaseKey][changeKey], "add"):
-                self.activeDatabase[databaseKey][changeKey].add(addition)
-        
-        except (KeyError, InnerKeyError, TypeError, InnerTypeError):
-            logger.error("Complicated error", exc_info=True)
-        except:
-            logger.error("Unknown error", exc_info=True)
-
-    def _addToDictInIterable(self, databaseKey, identifierKey, identifierValue, changeKey, addition):
-        try:
-            #Check if databaseKey exists
-            if self._structure.get(databaseKey) is None:
-                raise KeyError(f"Error with key: {databaseKey}")
-            
-            subDatabase = self._structure[databaseKey]
-            if type(subDatabase[1]) is not dict:
-                raise FunctionChoiceError(f"database[{databaseKey}] values are not of type {type(subDatabase[1])}")
-            
-            subDictStructure = subDatabase[1]
-            if subDictStructure[identifierKey] is None or subDictStructure[changeKey] is None:
-                raise KeyError(f"Error with key: {identifierKey if subDictStructure[identifierKey] is None else changeKey}")
-            
-            allowedDatatypesChange = getAllowedDatatypes(subDictStructure[changeKey])
-            allowedDatatypesIdentifier = getAllowedDatatypes(subDictStructure[identifierKey])
-            if not (type(addition) in allowedDatatypesChange) or not (type(identifierValue) in allowedDatatypesIdentifier):
-                wrongTypeValue = addition in allowedDatatypesChange and addition or identifierValue
-                wrongType = addition in allowedDatatypesChange and type(addition) or type(identifierValue)
-                correctTypes = addition in allowedDatatypesChange and allowedDatatypesChange or allowedDatatypesIdentifier
-                if len(correctTypes) > 1:
-                    types = ""
-                    for typeVar in correctTypes:
-                        types += str(typeVar) + ", "
-                else:
-                    types = str(list(correctTypes)[0])
-                raise TypeError(
-                    f"""Wrong type: {wrongTypeValue} of type {wrongType} should be of type {types}""")
-            a = dict()
-
-            for dictionary in self.activeDatabase[databaseKey]:
-                if dictionary[identifierKey] == identifierValue:
-                    if hasattr(dictionary[changeKey], "append"):
-                        dictionary[changeKey].append(addition)
-                    if hasattr(dictionary[changeKey], "add"):
-                        dictionary[changeKey].add(addition)
-        except (KeyError, InnerKeyError, TypeError, InnerTypeError):
-            logger.error("Complicated error", exc_info=True)
-        except:
-            logger.error("Unknown error", exc_info=True)
-
-    def _addMultipleToDictIterable(self, databaseKey, identifierKey, identifierValue, changeKey, additions, types):
-        try:
-            #Check if databaseKey exists
-            if self._structure.get(databaseKey) is None:
-                raise KeyError(f"Error with key: {databaseKey}")
-            
-            subDatabase = self._structure[databaseKey]
-            if subDatabase[0] is not dict:
-                raise FunctionChoiceError
-            
-            subDictStructure = subDatabase[1]
-            if subDictStructure[identifierKey] is None or subDictStructure[changeKey] is None:
-                raise KeyError(f"Error with key: {identifierKey if subDictStructure[identifierKey] is None else changeKey}")
-            
-            allowedDatatypesChange = getAllowedDatatypes(subDictStructure[changeKey])
-            allowedDatatypesIdentifier = getAllowedDatatypes(subDictStructure[identifierKey])
-            for typeVar in types:
-                if not typeVar in allowedDatatypesChange:
-                    raise InnerTypeError
-            if not type(identifierValue) in allowedDatatypesIdentifier:
-                raise TypeError
-            if type(additions) is not subDatabase[0]:
-                raise TypeError
-
-            for dictionary in self.activeDatabase[databaseKey]:
-                if dictionary[identifierKey] == identifierValue:
-                    if hasattr(dictionary[changeKey], "extend"):
-                        dictionary[changeKey].extend(additions)
-                    if hasattr(dictionary[changeKey], "update"):
-                        dictionary[changeKey].update(additions)
-        except (KeyError, InnerKeyError, TypeError, InnerTypeError):
-            logger.error("Complicated error", exc_info=True)
-        except:
-            logger.error("Unknown error", exc_info=True)
-
-    def _overwriteDictItem(self, databaseKey, identifierKey, identifierValue, changeKey, newValue):
-        try:
-            #Check if databaseKey exists
-            if self._structure.get(databaseKey) is None:
-                raise KeyError(f"Error with key: {databaseKey}")
-            
-            subDatabase = self._structure[databaseKey]
-            if subDatabase[0] is not dict:
-                raise InnerTypeError
-            
-            subDictStructure = subDatabase[1]
-            if subDictStructure[identifierKey] is None or subDictStructure[changeKey] is None:
-                raise KeyError(identifierKey if subDictStructure[identifierKey] is None else changeKey)
-            
-            allowedDatatypesChange = getAllowedDatatypes(subDictStructure[changeKey])
-            allowedDatatypesIdentifier = getAllowedDatatypes(subDictStructure[identifierKey])
-            if not type(newValue) in allowedDatatypesChange or not type(identifierValue) in allowedDatatypesIdentifier:
-                raise TypeError
-
-            for dictionary in self.activeDatabase[databaseKey]:
-                if dictionary[identifierKey] == identifierValue:
-                    dictionary[changeKey] = newValue
-        except (KeyError, InnerKeyError, TypeError, InnerTypeError):
-            logger.error("Complicated error", exc_info=True)
-        except:
-            logger.error("Unknown error", exc_info=True)
-                
-
-    def _updateItemKey(self, databaseKey, identifierKey, identifierValue, valueToChangeKey, newValue):
-        """
-        Updates an items valueToChangeKey into newValue. Item is found based on identifierKey, identifierValue
-        """
-        try:
-            #Check if databasekey exists
-            if self._structure.get(databaseKey) is None:
-                raise KeyError
-            
-            subDatabase = self._structure[databaseKey]
-
-            if type(subDatabase[0]) is not type(dict):
-                raise InnerTypeError(f"database[{databaseKey}] is not dict")
-            
-            dictStructure = subDatabase[1]
-            
-            if dictStructure.get(identifierKey) is None:
-                raise InnerKeyError(f"{identifierKey} is not in database[{databaseKey}]")
-            
-            dictSubDatabaseIdentifier = dictStructure[identifierKey]
-            allowedIdentifierDatatypes = getAllowedDatatypes(dictSubDatabaseIdentifier)
-            if not type(identifierValue) in allowedIdentifierDatatypes:
-                raise InnerTypeError(f"{identifierValue} of type {type(identifierValue)} should be {allowedIdentifierDatatypes}")
-            
-            dictSubDatabaseChange = dictStructure[valueToChangeKey]
-            allowedChangeDatatypes = getAllowedDatatypes(dictSubDatabaseChange)
-            if not type(newValue) in allowedChangeDatatypes:
-                raise InnerTypeError(f"{newValue} of type {type(newValue)} should be {allowedChangeDatatypes}")
-            
-            try:
-                for i, item in enumerate(self.activeDatabase[databaseKey]):
-                    if item[identifierKey] == identifierValue:
-                        self.activeDatabase[databaseKey][i][valueToChangeKey] = newValue
-                        break
-                success = True
-            except:
-                success = False
-            if not success:
-                raise UpdateError(identifierKey=identifierKey, identifierValue=identifierValue, valueToChangeKey=valueToChangeKey, newValue=newValue)
-        except (TypeError, InnerTypeError, KeyError, InnerKeyError):
-            logger.error("Complicated error", exc_info=True)
-        except UpdateError:
-            logger.error("Error when updating dict", exc_info=True)
-        except:
-            logger.error("Unknwon error", exc_info=True)
-
-    def _appendToItemKey(self, databaseKey, identifierKey, identifierValue, valueToChangeKey, addition):
-        """
-        Appends newValue into valueToChangeKey. Item is found based on identifierKey, identifierValue
-        """
-        try:
-            #Check if databasekey exists
-            if self._structure.get(databaseKey) is None:
-                raise KeyError
-            
-            subDatabase = self._structure[databaseKey]
-
-            if type(subDatabase[0]) is not type(dict):
-                raise InnerTypeError(f"database[{databaseKey}] is not dict")
-            
-            dictStructure = subDatabase[1]
-            
-            if dictStructure.get(identifierKey) is None:
-                raise InnerKeyError(f"{identifierKey} is not in database[{databaseKey}]")
-            
-            dictSubDatabaseIdentifier = dictStructure[identifierKey]
-            allowedIdentifierDatatypes = getAllowedDatatypes(dictSubDatabaseIdentifier)
-            if not type(identifierValue) in allowedIdentifierDatatypes:
-                raise InnerTypeError(f"{identifierValue} of type {type(identifierValue)} should be {allowedIdentifierDatatypes}")
-            
-            dictSubDatabaseChange = dictStructure[valueToChangeKey]
-            allowedChangeDatatypes = getAllowedDatatypes(dictSubDatabaseChange)
-            if not type(addition) in allowedChangeDatatypes:
-                raise InnerTypeError(f"{addition} of type {type(addition)} should be {allowedChangeDatatypes}")
-            
-            try:
-                for i, item in enumerate(self.activeDatabase[databaseKey]):
-                    if item[identifierKey] == identifierValue:
-                        if hasattr(dictStructure[valueToChangeKey], "append"):
-                            self.activeDatabase[databaseKey][i][valueToChangeKey].append(addition)
-                        elif hasattr(dictStructure[valueToChangeKey], "add"):
-                            self.activeDatabase[databaseKey][i][valueToChangeKey].add(addition)
-                        else:
-                            raise KeyError
-                        break
-                success = True
-            except:
-                success = False
-            if not success:
-                raise UpdateError(message=f"{databaseKey}, {identifierKey}, {valueToChangeKey}",identifierKey=identifierKey, identifierValue=identifierValue, valueToChangeKey=valueToChangeKey, newValue=addition)
-        except (TypeError, InnerTypeError, KeyError, InnerKeyError):
-            logger.error("Complicated error", exc_info=True)
-        except UpdateError:
-            logger.error("Error when updating dict", exc_info=True)
-        except:
-            logger.error("Unknwon error", exc_info=True)
-        
     def _save_db(self):
         """
         Saves the database to file
@@ -590,4 +353,17 @@ class Database:
                 dump(self.activeDatabase,databaseFile)   
                 databaseFile.close()
         except:
-            logger.error("Some error with saving", exc_info=True)
+            logger.error(f"Some error with saving in {self.name} database", exc_info=True)
+
+    def _load_db(self):
+        """
+        Loads database into active memory
+        """
+        if os.path.exists(self.file_path) and os.path.getsize(self.file_path) > 0:
+            with gzip.open(self.file_path, "rb") as databaseFile:
+                self.activeDatabase = load(databaseFile)   
+                databaseFile.close()
+
+        else:
+            self.activeDatabase = self._createStructure(self._structure)
+

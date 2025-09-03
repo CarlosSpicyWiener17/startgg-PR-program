@@ -3,7 +3,7 @@ from storage.database import Database
 
 entrantStructure = {
             "name" : (None, str),
-            "userId" : (None,int),
+            "id" : (None,int),
             "discriminator" : (None, str),
             "link" : (None, str),
             "entrantId" : (None,int),
@@ -18,11 +18,17 @@ ownerStructure = {
             "id" : (None, int)
         }
 
+setStructure = {
+    "winner" : (None, str),
+    "loser" : (None, str)
+}
+
 mainEventStructure = {
     "id" : (None, int),
     "name" : (None, str),
     "state" : (None, str),
-    "entrants" : (list, dict)
+    "entrants" : (list, entrantStructure),
+    "sets" : (list, setStructure)
 }
 
 tournamentStructure = {
@@ -30,7 +36,7 @@ tournamentStructure = {
     "id" : (None, int),
     "state" : (None, int),
     "Owner" : (None, ownerStructure),
-    "mainEvent" : (None, dict),
+    "mainEvent" : (None, mainEventStructure),
     "link" : (None, str),
     "attendeeAmount" : (None, int),
     "attendeeBonus" : (None, int),
@@ -54,8 +60,9 @@ class Event_db(Database):
     """
     Tournament database
     """
-    def __init__(self):
-        super().__init__(eventDatabaseName, eventDatabaseStructure)
+    def __init__(self, logger, userDir):
+        super().__init__(eventDatabaseName, eventDatabaseStructure, logger, userDir)
+        self.logger = logger
 
     def loadEvents(self):
         self._load_db()
@@ -64,36 +71,93 @@ class Event_db(Database):
         """
         Changes eventTier of tournament to new tier
         """
-        self._updateItemKey("events", "id", tournamentId, "eventTier", newTier)
+        events = self.get("events")
+        newTournament = None
+        for i, event in enumerate(events):
+            if event["id"] == tournamentId:
+                newTournament = event
+                newTournament["eventTier"] = newTier
+                break
+        if not newTournament is None:
+            events.pop(i)
+            events.append(newTournament)
 
-    def toggleTournamentCounts(self, isCounting, tournamentId):
+    def getCounting(self):
+        """
+        Gives all tournaments which count for PR rankings
+        """
+        return self.get("events", lambda event: event["counting"])
+
+    def toggleTournamentCounts(self, tournamentId, isCounting,):
         """
         Changes counting key of tournament to isCounting of type bool
         """
-        self._updateItemKey("events", "id", tournamentId, "counting", isCounting)
+        events = self.get("events")
+        newTournament = None
+        for i, event in enumerate(events):
+            if event["id"] == tournamentId:
+                newTournament = event
+                newTournament["counting"] = isCounting
+                break
+        if not newTournament is None:
+            events.pop(i)
+            events.append(newTournament)
 
-    def addEvents(self, eventsToAdd):
+    def getEvent(self, eventId):
+        try:
+
+            events = self.get("events", lambda event: event["id"] == eventId)
+
+            if len(events) > 0:
+                return events[0]
+            else:
+                return None
+        except:
+            print("unknown error pls")
+
+    def addEvents(self, newEvents):
         """
         Add several tournaments to event database
         """
-        print("Try addMultiple")
-        self._updateMultipleDict("events", "id", eventsToAdd)
-        self._addMultiple("eventIds", set([event["id"] for event in eventsToAdd]))
+
+        for event in newEvents:
+            try:
+                oldEvent = self.getEvent(event["id"])
+                if not oldEvent is None:
+                    oldEvent["state"] = event["state"]
+                    oldEvent["mainEvent"] = event["mainEvent"]
+                    oldEvent["attendeeAmount"] = event["attendeeAmount"] 
+                    oldEvent["attendeeBonus"] = event["attendeeBonus"] 
+                    oldEvent["trackedScore"] = event["trackedScore"] 
+                    oldEvent["totalScore"] = event["totalScore"] 
+                    oldEvent["eventTier"] = event["eventTier"] 
+                    oldEvent["counting"] = event["counting"]
+                else:
+                    self.addEvent(event)
+            except:
+                self.logger.error(f"Couldnt add or update event to database: {event["name"]}\nLink: {event["link"]}")
+
+    def addEvent(self, event):
+        self.activeDatabase["events"].append(event)
 
     def removeEvent(self, eventId):
-        self._removeDict("events", "id", eventId)
+        for i, event in enumerate(self.activeDatabase["events"]):
+            if event["id"] == eventId:
+                self.activeDatabase["events"].remove(event)
+                break
 
     def getEvents(self, ids=None):
         if ids is None:
-            return self._getItems("events")
-        return self._conditionalGetDictItems("events", "id", lambda eventId: eventId in set(ids))
+            return self.get("events")
+        else:
+            return self.get("events", lambda item: item["id"] in ids)
     
     def addTime(self, start, end):
         if start > end:
             start, end = end, start
         merged = []
         placed = False
-        for s, e in self._getItems("checkedDates"):
+        for s, e in self.get("checkedDates"):
             if e < start:  # current interval ends before new one starts
                 merged.append((s, e))
             elif end < s:  # new one ends before current starts
@@ -106,30 +170,27 @@ class Event_db(Database):
                 end = max(end, e)
         if not placed:
             merged.append((start, end))
-        self._overwrite("checkedDates", merged)
+        self.overWrite("checkedDates", merged)
 
     def getSpecificEvent(self, id):
         """
         Gets specific event from tournament id
         """
-        return self._getItemFromKeyValue("events", "id", id)
+        return self.getEvents({id})
     
     def getProcessedEventIds(self, after, before):
         """
         Gets all, already processed, tournaments, within given timeframe
         """
-        isWithinDates = self._conditionalGetDictItems("events", "startAt", lambda eventStartAt, a=after, b=before: a <= eventStartAt and eventStartAt <= b)
-        print("is withing dates: ", isWithinDates)
+        isWithinDates = self.get("events", lambda event: after <= event["startAt"] and event["startAt"] <= before)
+
         return [event["id"] for event in isWithinDates]
     
     def isWithinTime(self, after, before):
-        for start, end in self._getItems("checkedDates"):
+        for start, end in self.get("checkedDates"):
             if start <= after and before <= end:
                 return True
         return False
-
-    def updateCounting(self, id, counting):
-        self._updateItemKey("events", "id", id, "counting", counting)
 
     def saveEvents(self):
         self._save_db()

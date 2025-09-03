@@ -12,7 +12,8 @@ playerStructure = {
     "link" : (None, str),
     "tournaments" : (list, dict),
     "setOfEntrantIds" : (set, int),
-    "userId" : (None, int)
+    "id" : (None, int),
+    "topCut" : (None, bool)
 }
 
 allPlayersStructure = {
@@ -22,96 +23,95 @@ allPlayersStructure = {
 
 playerDatabaseName = "AllPlayers"
 
+
 class AllPlayers(Database):
-    def __init__(self):
-        super().__init__(playerDatabaseName, allPlayersStructure)
-
-    def _updatePlayer(self, newPlayer):
-        tournamentInfo = {
-            "entrantId" : newPlayer["entrantId"],
-            "tournamentId" : newPlayer["tournamentId"],
-            "placement" : newPlayer["placement"] 
-        }
-        self._appendToItemKey("players", "discriminator", newPlayer["discriminator"], "tournaments", tournamentInfo)
-        self._appendToItemKey("players", "discriminator", newPlayer["discriminator"], "setOfEntrantIds", tournamentInfo["entrantId"])
-
+    def __init__(self, logger, userDir):
+        super().__init__(playerDatabaseName, allPlayersStructure, logger, userDir)
 
     def getPlayers(self, discriminators = None):
         if discriminators is None:
-            return self.activeDatabase["players"]
+            return self.get("players")
         else:
-            players = []
-            for discriminator in discriminators:
-                success, gotPlayer = self.getPlayerFromDiscriminator(discriminator)
-                if success:
-                    players.append(gotPlayer)
-        return players
+            print("Getting players")
+            return self.get("players", lambda player: player["discriminator"] in discriminators)
 
-    def getPlayerFromDiscriminator(self, discriminator):
-        #Get player from startgg discriminator
-        if self.playerStored(discriminator):
-            for player in self.getPlayers():
-                if player["discriminator"] == discriminator:
-                    return True, player
-        return False, None
+    def toggleTopCut(self, playerDiscriminator, isTopCut):
+        players = self.get("players")
+        newPlayer = None
+        for i, player in enumerate(players):
+            if player["discriminator"] == playerDiscriminator:
+                newPlayer = player
+                newPlayer["topCut"] = isTopCut
+                print("Player:\n", player, "\nNewplayer:\n", newPlayer)
+                break
+        if not newPlayer is None:
+            players.pop(i)
+            players.append(newPlayer)
+            print("new playerlist")
+        self.activeDatabase["players"] = players
 
-    def addPlayer(self, newPlayer, entrant):
+    def getPlayerFromEntrant(self, entrantId):
+        players = self.get("players", lambda player: entrantId in player["setOfEntrantIds"])
+        if players != []:
+            return players[0]
+
+    def getPlayer(self, discriminator):
+        try:
+
+            players = self.get("players", lambda player: player["discriminator"] == discriminator)
+
+            if len(players) > 0:
+                return players[0]
+            else:
+                return None
+        except:
+            print("unknown error pls")
+
+    def addPlayer(self, newPlayer):
         """
         Add player to database, return status:\n
             1   : Player added
             0   : Player updated
             -1  : Error
         """
-        status = self._addPlayer(newPlayer, entrant)
-        if status == 0:
-            if entrant:
-                self._updatePlayer(newPlayer)
-        return status
+        self.add("players", newPlayer)
 
-    def _addPlayer(self, newPlayer, entrant : bool):
-        setOfDiscriminators = self._getItems("playerDiscriminators")
-        try:
-            if newPlayer["discriminator"] in setOfDiscriminators:
-                return 0
-            if entrant:
-                tournamentInfo = {
-                    "entrantId" : newPlayer["entrantId"],
-                    "tournamentId" : newPlayer["tournamentId"],
-                    "placement" : newPlayer["placement"] 
-                }
-                newPlayerFiltered = {
-                    "name" : newPlayer["name"],
-                    "userId" : newPlayer["userId"],
-                    "discriminator" : newPlayer["discriminator"],
-                    "link" : newPlayer["link"],
-                    "tournaments" : list(tournamentInfo),
-                    "setOfEntrantIds" : set(tournamentInfo["entrantId"])
-                }
+    def addPlayers(self, newPlayers):
+        """
+        Add player to database, return status:\n
+            1   : Player added
+            0   : Player updated
+            -1  : Error
+        """
+
+        for player in newPlayers:
+            oldPlayer = self.getPlayer(player["discriminator"])
+            if not oldPlayer is None:
+                for tournament in player["tournaments"]:
+                    if not tournament in oldPlayer["tournaments"]:
+                        oldPlayer["tournaments"].append(tournament)
+                oldPlayer["setOfEntrantIds"].update(player["setOfEntrantIds"])
             else:
-                newPlayerFiltered = {
-                    "name" : newPlayer["name"],
-                    "userId" : newPlayer["userId"],
-                    "discriminator" : newPlayer["discriminator"],
-                    "link" : newPlayer["link"],
-                    "tournaments" : [],
-                    "setOfEntrantIds" : set()
-                }
-            self._add("players", newPlayerFiltered)
-            self._add("playerDiscriminators",newPlayer["discriminator"])
-            return 1
-        except:
-            return -1
-        
+                self.addPlayer(player)
+        print("Added all yay")
+
+
+
     def removePlayer(self, startggDiscriminator):
-        setOfDiscriminators = self._getItems("playerDiscriminators")
+        setOfDiscriminators = self.get("playerDiscriminators")
         if startggDiscriminator in setOfDiscriminators:
-            self._removeDict("players", "discriminator", startggDiscriminator)
+            players = self.get("players")
+            for player in players:
+                if player["discriminator"] == startggDiscriminator:
+                    self.remove("players", player)
+                    self.remove("playerDiscriminators", startggDiscriminator)
+                    break
         
     def getSetCheck(self):
-        return self._getItems("playerDiscriminators")
+        return self.get("playerDiscriminators")
     
     def playerStored(self, discriminator):
-        savedPlayers = self._getItems("playerDiscriminators")
+        savedPlayers = self.get("playerDiscriminators")
         if discriminator in savedPlayers:
             return True
         return False

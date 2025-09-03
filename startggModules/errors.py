@@ -46,6 +46,14 @@ class EventMissingError(TournamentError):
     def __init__(self, link, eventName):
         super().__init__("Error with finding event. Let me know if this happens", link, eventName)
 
+class TooManyFitError(Exception):
+    def __init__(self):
+        super().__init__()
+
+class NoneFitError(Exception):
+    def __init__(self):
+        super().__init__()
+
 class OwnerError(TournamentError):
     def __init__(self, link, eventName):
         super().__init__("Error with tournament owner. Let me know if this happens", link, eventName)
