@@ -8,3 +8,5 @@ auth.txt
 /__pycache__
 *.pyc
 __pycache__/systemInterface.cpython-312.pyc
+/__pycache__
+*.spec
