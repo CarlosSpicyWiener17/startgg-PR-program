@@ -95,7 +95,7 @@ class Exporter:
                         elif set["loser"]["discriminator"] == competitor["discriminator"]:
                             losses[set["winner"]["discriminator"]] = losses.get(set["winner"]["discriminator"], 0) + 1
                     except:
-                        self.system.st(f"Error with a set in {tournament["name"]}")
+                        self.system.queue.put(("status",f"Error with a set in {tournament["name"]}"))
 
                 placement = next((entrant["placement"] for entrant in tournament["mainEvent"]["entrants"] if entrant["entrantId"] in competitor["setOfEntrantIds"]), 0)
                 yield {"tournament": tournament, "wins": wins, "losses": losses, "placement": placement}
@@ -105,33 +105,30 @@ class Exporter:
         return os.path.join(self.script_dir, itemName+".xlsx")
         
     def export(self, seasonNumber):
-        acquiered = self.system.writerLock.acquire(timeout=3)
 
-        if acquiered:
+        with self.system.writerLock:
             self.number = seasonNumber
-            self.system.st(f"Exporting Season {self.number}")
+            self.system.queue.put(("status",f"Exporting Season {self.number}"))
             self.workbook = xl.Workbook(self._getFilepath(seasonNumber))
-            self.system.st("Creating tracklist")
+            self.system.queue.put(("status","Creating tracklist"))
             self.createTracklist()
-            self.system.st(f"Creating Season {self.number} Brackets")
+            self.system.queue.put(("status",f"Creating Season {self.number} Brackets"))
             self.createBrackets()
-            self.system.st(f"Creating Season {self.number} Contenders")
-            status = self.createCompetitors()
+            self.system.queue.put(("status",f"Creating Season {self.number} Contenders"))
+            self.createCompetitors()
 
             self.createH2H()
             print("through exporting")
             self.workbook.close()
-            self.system.UI.status.set("Exported to Documents/Wiener Exports folder")
-            self.system.writerLock.release()
-        else:
-            return
+            self.system.queue.put(("status","Exported to Documents/Wiener Exports folder"))
+
 
     def createTracklist(self):
         self.system.getTracklist()
         workbook = self.workbook
         tracklist = self.system.tracklistInfo
         if len(tracklist) == 0:
-            self.system.st("Tracklist is empty")
+            self.system.queue.put(("status","Tracklist is empty"))
             sleep(3)
 
         trackSheet = workbook.add_worksheet("Tracklist")
@@ -190,7 +187,7 @@ class Exporter:
         tourneyNum = len(tournaments)
         for i, tournament in enumerate(tournaments):
             try:
-                self.system.st(f"Creating Season {self.number} Brackets\tTournament {i+1} of {tourneyNum}")
+                self.system.queue.put(("status",f"Creating Season {self.number} Brackets\tTournament {i+1} of {tourneyNum}"))
                 if not tournament["counting"]:
                     continue
                 tourneyFormat = workbook.add_format(tourneyFormats[tournament["eventTier"]])
@@ -209,7 +206,7 @@ class Exporter:
                 trackSheet.write(1+index, 6, notable, borderFormat)
                 index+=1
             except:
-                self.system.st(f"Unknown error when making bracket {tournament["name"]}")
+                self.system.queue.put(("status",f"Unknown error when making bracket {tournament["name"]}"))
                 sleep(3)
         
     def createCompetitors(self):
@@ -234,7 +231,6 @@ class Exporter:
         normalform = workbook.add_format()
         normalform.set_text_wrap(True)
         bform = workbook.add_format({"top" : 5, "bold" : True})
-        newCompetitors = []
         tracklist = self.system.getTrackedDiscriminators()
         countingTournaments = self.system.getValidTournaments()
         contenderNum = len(tracklist)
@@ -242,7 +238,7 @@ class Exporter:
         self.competitors = self.sortCompetitors()
         for i, competitor in enumerate(self.competitors):
             try:
-                self.system.st(f"Creating Season {self.number} Contenders. {i+1} of {contenderNum}")
+                self.system.queue.put(("status",f"Creating Season {self.number} Contenders. {i+1} of {contenderNum}"))
                 if competitor["tournaments"] is None or competitor["tournaments"] == []:
                     continue
                 
@@ -303,13 +299,13 @@ class Exporter:
                         hasBorder = True
                     rowt+=1
             except:
-                self.system.st(f"Some error with contender {competitor["name"]}")
+                self.system.queue.put(("status",f"Some error with contender {competitor["name"]}"))
                 sleep(3)
         self.competitors = self.system.getCompetitors()
         return True
 
     def sortCompetitors(self):
-        self.system.st("Approx. Contender sorting based on result")
+        self.system.queue.put(("status","Approx. Contender sorting based on result"))
         newCompetitors = []
         tracklist = self.system.getTrackedDiscriminators()
         countingTournaments = self.system.getValidTournaments()
@@ -330,7 +326,7 @@ class Exporter:
                 competitor["setLosses"] = totalLosses
                 newCompetitors.append(competitor)
             except:
-                self.system.st(f"Unknown sort error with competitor {competitor["name"]}")
+                self.system.queue.put(("status",f"Unknown sort error with competitor {competitor["name"]}"))
                 sleep(3)
         newCompetitors.sort(key=lambda c: c["rankScore"], reverse=True)
         return newCompetitors
@@ -338,7 +334,7 @@ class Exporter:
     def createH2H(self):
         self.competitors = self.system.getCompetitors()
         self.competitors = self.sortCompetitors()
-        self.system.st("Creating H2H")
+        self.system.queue.put(("status","Creating H2H"))
         workbook = self.workbook
         tracksheet = workbook.add_worksheet(f"S'{self.number} H2H")
         blacked = workbook.add_format({"bg_color" : Color("#000000")})
@@ -354,6 +350,5 @@ class Exporter:
                         msg+=str(competitor["setWins"].get(competitor2["discriminator"],0)) + "-" + str(competitor["setLosses"].get(competitor2["discriminator"],0))
                         tracksheet.write(i+1, j+1, msg)
             except:
-                self.system.st(f"Unknown error with {competitor["name"]}")
-                sleep(3)
+                self.system.queue.put(("status",f"Unknown error with {competitor["name"]}"))
         pass

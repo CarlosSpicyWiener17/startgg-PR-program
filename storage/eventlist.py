@@ -1,6 +1,7 @@
 from storage.errors import *
-from storage.database import Database
-
+import gzip
+from pickle import load, dump
+import os 
 entrantStructure = {
             "name" : (None, str),
             "id" : (None,int),
@@ -56,62 +57,67 @@ eventDatabaseStructure = {
 
 eventDatabaseName = "Events"
 
-class Event_db(Database):
+class Event_db:
     """
     Tournament database
     """
     def __init__(self, logger, userDir):
-        super().__init__(eventDatabaseName, eventDatabaseStructure, logger, userDir)
+        self.name = eventDatabaseName
+        self.file_path = os.path.join(userDir, self.name+".pkl")
         self.logger = logger
 
     def loadEvents(self):
-        self._load_db()
+        try:
+            if os.path.exists(self.file_path) and os.path.getsize(self.file_path) > 0:
+                with gzip.open(self.file_path, "rb") as databaseFile:
+                    self.activeDatabase = load(databaseFile)   
+                    databaseFile.close()
+            else:
+                self.activeDatabase = {
+                    "events" : [],
+                    "eventIds" : set(),
+                    "checkedDates" : []
+                }
+        except:
+            self.activeDatabase = {
+                    "events" : [],
+                    "eventIds" : set(),
+                    "checkedDates" : []
+                }
+            self.logger.error(f"Some error with saving in {self.name} database", exc_info=True)
 
     def updateTournamentTier(self, newTier : str, tournamentId):
         """
         Changes eventTier of tournament to new tier
         """
-        events = self.get("events")
-        newTournament = None
-        for i, event in enumerate(events):
+        for event in self.activeDatabase["events"]:
             if event["id"] == tournamentId:
-                newTournament = event
-                newTournament["eventTier"] = newTier
+                event["eventTier"] = newTier
                 break
-        if not newTournament is None:
-            events.pop(i)
-            events.append(newTournament)
 
     def getCounting(self):
         """
         Gives all tournaments which count for PR rankings
         """
-        return self.get("events", lambda event: event["counting"])
+        return [event for event in self.activeDatabase["events"] if event["counting"]]
 
     def toggleTournamentCounts(self, tournamentId, isCounting,):
         """
         Changes counting key of tournament to isCounting of type bool
         """
-        events = self.get("events")
-        newTournament = None
-        for i, event in enumerate(events):
+        for event in self.activeDatabase["events"]:
             if event["id"] == tournamentId:
-                newTournament = event
-                newTournament["counting"] = isCounting
+                event["counting"] = isCounting
                 break
-        if not newTournament is None:
-            events.pop(i)
-            events.append(newTournament)
+
 
     def getEvent(self, eventId):
         try:
 
-            events = self.get("events", lambda event: event["id"] == eventId)
-
-            if len(events) > 0:
-                return events[0]
-            else:
-                return None
+            for event in self.activeDatabase["events"]:
+                if event["id"] == eventId:
+                    return event
+            return None
         except:
             print("unknown error pls")
 
@@ -122,6 +128,7 @@ class Event_db(Database):
 
         for event in newEvents:
             try:
+                self.activeDatabase["eventIds"].add(event["id"])
                 oldEvent = self.getEvent(event["id"])
                 if not oldEvent is None:
                     oldEvent["state"] = event["state"]
@@ -141,23 +148,24 @@ class Event_db(Database):
         self.activeDatabase["events"].append(event)
 
     def removeEvent(self, eventId):
-        for i, event in enumerate(self.activeDatabase["events"]):
+        for event in self.activeDatabase["events"]:
             if event["id"] == eventId:
                 self.activeDatabase["events"].remove(event)
                 break
 
+
     def getEvents(self, ids=None):
         if ids is None:
-            return self.get("events")
+            return self.activeDatabase["events"]
         else:
-            return self.get("events", lambda item: item["id"] in ids)
+            return [event for event in self.activeDatabase["events"] if event["id"] in ids]
     
     def addTime(self, start, end):
         if start > end:
             start, end = end, start
         merged = []
         placed = False
-        for s, e in self.get("checkedDates"):
+        for s, e in self.activeDatabase["checkedDates"]:
             if e < start:  # current interval ends before new one starts
                 merged.append((s, e))
             elif end < s:  # new one ends before current starts
@@ -170,7 +178,7 @@ class Event_db(Database):
                 end = max(end, e)
         if not placed:
             merged.append((start, end))
-        self.overWrite("checkedDates", merged)
+        self.activeDatabase["checkedDates"] = merged
 
     def getSpecificEvent(self, id):
         """
@@ -182,15 +190,22 @@ class Event_db(Database):
         """
         Gets all, already processed, tournaments, within given timeframe
         """
-        isWithinDates = self.get("events", lambda event: after <= event["startAt"] and event["startAt"] <= before)
 
-        return [event["id"] for event in isWithinDates]
+        return {event["id"] for event in self.activeDatabase["events"] if after <= event["startAt"] and event["startAt"] <= before}
     
     def isWithinTime(self, after, before):
-        for start, end in self.get("checkedDates"):
+        for start, end in self.activeDatabase["checkedDates"]:
             if start <= after and before <= end:
                 return True
         return False
 
     def saveEvents(self):
-        self._save_db()
+        """
+        Saves the database to file
+        """
+        try:
+            with gzip.open(self.file_path, "wb") as databaseFile:
+                dump(self.activeDatabase,databaseFile)   
+                databaseFile.close()
+        except:
+            self.logger.error(f"Some error with saving in {self.name} database", exc_info=True)

@@ -7,6 +7,8 @@ from time import sleep
 import logging
 from platformdirs import user_data_dir, user_documents_dir
 import os
+import queue
+
 appName = "WienerPR"
 appAuthor = "CarlosSpicyWiener"
 
@@ -32,14 +34,13 @@ logger.addHandler(info_handler)
 class App:
     def __init__(self):
         self.logger = logger
-
+        self.queue = queue.Queue()
         self.docuDir = os.path.join(user_documents_dir(), "Wiener Exports")
         os.makedirs(self.docuDir, exist_ok=True)
         self._setupLocks()
         self._setupInfopoints()
         self.startgg = startggInterface(self, self.docuDir)
         self.UI = UI(self)
-        logger.info("Exporter init")
         self.writer = Exporter(self, self.docuDir)
         tracklist = self.startgg.trackedPlayers.getTracklist()
         """
@@ -51,6 +52,38 @@ class App:
         self.tournamentsInfo = self.startgg.events.getEvents()
         self.UI.createTracklist()
         self.UI.createTournaments()
+        self.UI.window.after(100, self.checkQueue)
+
+    def processQueue(self):
+        try:
+            while True:
+                msg, data = self.queue.get_nowait()
+                try:
+                    if msg == "addSingleEvent":
+                        self.UI._getTournaments()
+                        self._updateTournaments()
+                    elif msg == "removedEvent":
+                        self.UI._getTournaments()
+                        self._updateTournaments()
+                    elif msg == "removeTracked":
+                        self.startgg.getTrackedPlayers()  
+                        self.updateTracklist()
+                    elif msg == "getTournaments":
+                        self.tournamentsInfo = data
+                        self._updateTournaments()
+                    elif msg == "status":
+                        self.st(data)
+                    elif msg == "error":
+                        self.logger.error(data)
+                except:
+                    pass
+                self.queue.task_done()
+        except queue.Empty:
+            pass
+
+    def checkQueue(self):
+        self.processQueue()
+        self.UI.window.after(100, self.checkQueue)
 
     def getPlayer(self, disc):
         return self.startgg.playerList.getPlayer(disc)
@@ -61,12 +94,11 @@ class App:
             if player["discriminator"] in tracklist:
                 yield player
 
-
     def reRank(self):
         t.Thread(target=self.startgg.reRankTournaments).start()
 
     def updateTopCut(self, discriminator, yOn):
-        self.startgg.playerList.toggleTopCut(discriminator, yOn == 1)
+        t.Thread(target= lambda: self.startgg.toggleTopCut(discriminator, yOn == 1)).start()
 
     def addEvent(self, entryfield):
         self.st("Adding single event...")
@@ -84,9 +116,10 @@ class App:
                     slug=link[slugStart:slugEnd]
             
         except:
-            self.st(f"Error with processing link:\n{entryfield.get()}")
+            self.st(f"Error with processing link: {entryfield.get()}")
             return
-        self.startgg.addEvent(slug)
+    
+        t.Thread(target = lambda: self.startgg.addEvent(slug), daemon=True).start()
         
         
 
@@ -106,19 +139,9 @@ class App:
     def getValidTournaments(self):
         tracklist = self.startgg.trackedPlayers.getTracklist()
         allCounting = [tournament for tournament in self.tournamentsInfo if tournament["counting"]]
-        allTracked = []
-        for tournament in allCounting:
-            
-            hasTracked = False
-            for entrant in tournament["mainEvent"]["entrants"]:
-                if entrant["discriminator"] in tracklist:
-                    hasTracked = True
-                    break
-            if hasTracked:
-                allTracked.append(tournament)
-                continue
-        filled = self.startgg.fillEventSets(allTracked, tracklist)
-        return filled
+
+        self.startgg.fillEventSets(allCounting, tracklist)
+        return allCounting
 
     def trackPlayer(self, discriminator):
         with self.databaseLock:
@@ -133,49 +156,38 @@ class App:
                 self.st(f"Successfully tracked new player")
             self.startgg.getTrackedPlayers()    
             self.updateTracklist()
+            self.UI.status.set("Player tracked")
         return status
 
     def untrackPlayer(self, discriminator):
         self.st("Untracking player")
-        self.startgg.trackedPlayers.removeTrackedPlayer(discriminator)
-        self.startgg.getTrackedPlayers()
-        self.updateTracklist()
-        self.st("Assume success")
+        t.Thread(target=lambda: self.startgg.removeTrackedPlayer(discriminator)).start()
 
     def updateCounting(self, id, countingVar):
         #Turn counting integer into bool
-        self.startgg.events.toggleTournamentCounts(id, countingVar.get()==1)
+        t.Thread(target= lambda: self.startgg.toggleTournamentCounts(id, countingVar.get()==1)).start()
 
     def st(self, msg):
         self.UI.status.set(msg)
 
     def updateTournamentTier(self, newTier, tournamentId):
         self.st("Updating tournament tier")
-        self.startgg.events.updateTournamentTier(newTier, tournamentId)
+        t.Thread(target= lambda: self.startgg.updateTournamentTier(newTier, tournamentId)).start()
 
     def openLink(self,link):
         webbrowser.open(link,2,True)
 
-    def log(self, msg):
-        self.logger.info(msg)
-
-    def loge(self, msg):
-        self.logger.error(msg)
-
     def getTournaments(self, s, e):
-        self.st("Getting Tournaments")
+        self.queue.put(("status","Getting Tournaments"))
 
         t.Thread(target=lambda: self.startgg.getTournaments(s,e), daemon=False).start()
 
     def export(self, entryField):
-        if not self.writerLock.locked():
-            self.UI.status.set("Exporting...")
-            t.Thread(target= lambda:self.writer.export(entryField.get())).start()
+        self.UI.status.set("Exporting...")
+        t.Thread(target= lambda:self.writer.export(entryField.get())).start()
         
     def deleteTournament(self, tourneyId):
-        self.startgg.events.removeEvent(tourneyId)
-        self.tournamentsInfo = self.startgg.events.getEvents()
-        self._updateTournaments()
+        t.Thread(target= lambda: self.startgg.removeEvent(tourneyId)).start()
 
     def getTracklist(self):
         self.startgg.getTrackedPlayers()
@@ -184,7 +196,7 @@ class App:
         return self.startgg.trackedPlayers.getTracklist()
 
     def updateTracklist(self):
-        self.UI.status.set("Player tracked")
+        
         self.UI.createTracklist()
         
 

@@ -1,44 +1,65 @@
-from storage.database import Database
-
+from pickle import load, dump
+import gzip
+import os
 trackedPlayersStructure = {
     "playerDiscriminators" : (set, str)
 }
 
 trackedPlayersName = "TrackedPlayers"
 
-class TrackedPlayers(Database):
+class TrackedPlayers:
     def __init__(self, logger, userDir):
-        super().__init__(trackedPlayersName, trackedPlayersStructure, logger, userDir)
-
-    def getTracklist(self):
-        return self.get("playerDiscriminators")
+        self.name = trackedPlayersName
+        self.file_path = os.path.join(userDir, self.name+".pkl")
+        self.logger = logger
+        
+    def getTracklist(self) -> set:
+        return self.activeDatabase["playerDiscriminators"]
     
     def isTracked(self, discriminator):
         #Checks if this discriminator is stored
-        setOfDiscriminators = self.get("playerDiscriminators")
-        if discriminator in setOfDiscriminators:
+        if discriminator in self.activeDatabase["playerDiscriminators"]:
             return True
         return False
 
     def addTrackedPlayer(self, newPlayer):
-        setOfDiscriminators = self.get("playerDiscriminators")
+
         try:
-            if newPlayer["discriminator"] in setOfDiscriminators:
+            if newPlayer["discriminator"] in self.activeDatabase["playerDiscriminators"]:
                 return 0
-            self.add("playerDiscriminators", newPlayer["discriminator"])
+            self.activeDatabase["playerDiscriminators"].add(newPlayer["discriminator"])
             return 1
         except:
             return -1
         
     def removeTrackedPlayer(self, startggDiscriminator):
-        setOfDiscriminators = self.get("playerDiscriminators")
-        if startggDiscriminator in setOfDiscriminators:
+        if startggDiscriminator in self.activeDatabase["playerDiscriminators"]:
             self.activeDatabase["playerDiscriminators"].remove(startggDiscriminator)
     
     def loadTracklist(self):
-        self._load_db()
-        print(self.activeDatabase)
+        try:
+            if os.path.exists(self.file_path) and os.path.getsize(self.file_path) > 0:
+                with gzip.open(self.file_path, "rb") as databaseFile:
+                    self.activeDatabase = load(databaseFile)   
+                    databaseFile.close()
+            else:
+                self.activeDatabase = {
+                    "playerDiscriminators" : set()
+                }
+        except:
+            self.activeDatabase = {
+                    "playerDiscriminators" : set()
+                }
+            self.logger.error(f"Some error with saving in {self.name} database", exc_info=True)
 
     def saveTracklist(self):
-        self._save_db()
+        """
+        Saves the database to file
+        """
+        try:
+            with gzip.open(self.file_path, "wb") as databaseFile:
+                dump(self.activeDatabase,databaseFile)   
+                databaseFile.close()
+        except:
+            self.logger.error(f"Some error with saving in {self.name} database", exc_info=True)
 

@@ -1,5 +1,6 @@
-from storage.database import Database
-
+import gzip
+from pickle import load, dump
+import os
 playerTournamentsStructure = {
     "entrantId" : (None, int),
     "tournamentId" : (None, int),
@@ -24,76 +25,68 @@ allPlayersStructure = {
 playerDatabaseName = "AllPlayers"
 
 
-class AllPlayers(Database):
+class AllPlayers:
     def __init__(self, logger, userDir):
-        super().__init__(playerDatabaseName, allPlayersStructure, logger, userDir)
+        self.name = playerDatabaseName
+        self.logger = logger
+        self.file_path = os.path.join(userDir, self.name+".pkl")
 
     def getPlayers(self, discriminators = None):
         if discriminators is None:
-            return self.get("players")
+            return self.activeDatabase["players"]
         else:
             print("Getting players")
-            return self.get("players", lambda player: player["discriminator"] in discriminators)
+            return [player for player in self.activeDatabase["players"] if player["discriminator"] in discriminators]
 
     def toggleTopCut(self, playerDiscriminator, isTopCut):
-        players = self.get("players")
-        newPlayer = None
-        for i, player in enumerate(players):
+
+        for player in self.activeDatabase["players"]:
             if player["discriminator"] == playerDiscriminator:
-                newPlayer = player
-                newPlayer["topCut"] = isTopCut
-                print("Player:\n", player, "\nNewplayer:\n", newPlayer)
+                player["topCut"] = isTopCut
                 break
-        if not newPlayer is None:
-            players.pop(i)
-            players.append(newPlayer)
-            print("new playerlist")
-        self.activeDatabase["players"] = players
 
     def getPlayerFromEntrant(self, entrantId):
-        players = self.get("players", lambda player: entrantId in player["setOfEntrantIds"])
-        if players != []:
-            return players[0]
+        fittingPlayers = [player for player in self.activeDatabase["players"] if entrantId in player["setOfEntrantIds"]]
+        if len(fittingPlayers) > 0:
+            return fittingPlayers[0]
+        else:
+            return None
 
     def getPlayer(self, discriminator):
         try:
-
-            players = self.get("players", lambda player: player["discriminator"] == discriminator)
-
-            if len(players) > 0:
-                return players[0]
+            fittingPlayers = [player for player in self.activeDatabase["players"] if player["discriminator"] == discriminator]
+            if len(fittingPlayers) > 0:
+                return fittingPlayers[0]
             else:
                 return None
         except:
             print("unknown error pls")
 
-    def addPlayer(self, newPlayer):
-        """
-        Add player to database, return status:\n
-            1   : Player added
-            0   : Player updated
-            -1  : Error
-        """
-        self.add("players", newPlayer)
-
     def addPlayers(self, newPlayers):
         """
-        Add player to database, return status:\n
-            1   : Player added
-            0   : Player updated
-            -1  : Error
+        Add several tournaments to player database
         """
-
+        #pip install pysmashgg platformdirs customtkinter tkcalendar xlsxwriter pyinstaller
+        #altgraph, xlsxwriter, urllib3, setuptools, pywin32-ctypes, platformdirs, pefile, packaging, idna, darkdetect, charset_normalizer, certifi, babel, tkcalendar, requests, pyinstaller-hooks-contrib, customtkinter, pysmashgg, pyinstaller
         for player in newPlayers:
-            oldPlayer = self.getPlayer(player["discriminator"])
-            if not oldPlayer is None:
-                for tournament in player["tournaments"]:
-                    if not tournament in oldPlayer["tournaments"]:
-                        oldPlayer["tournaments"].append(tournament)
-                oldPlayer["setOfEntrantIds"].update(player["setOfEntrantIds"])
-            else:
-                self.addPlayer(player)
-        print("Added all yay")
+            try:
+                self.activeDatabase["playerDiscriminators"].add(player["discriminator"])
+                oldPlayer = self.getPlayer(player["discriminator"])
+                if not oldPlayer is None:
+                    oldPlayer["name"] = player["name"]
+                    for tournament in player["tournaments"]:
+                        if not tournament["entrantId"] in oldPlayer["setOfEntrantIds"]:
+                            oldPlayer["tournaments"].append(tournament)
+                            oldPlayer["setOfEntrantIds"].add(tournament["entrantId"])
+                    oldPlayer["topCut"] = player["topCut"] 
+                else:
+                    self.addPlayer(player)
+            except:
+                self.logger.error(f"Couldnt add or update player to database: {player["name"]}\nLink: {player["link"]}")
+
+    def addPlayer(self, player):
+        self.activeDatabase["players"].append(player)
+        self.activeDatabase["playerDiscriminators"].add(player["discriminator"])
 
 
 
@@ -117,8 +110,31 @@ class AllPlayers(Database):
         return False
 
     def loadPlayers(self):
-        self._load_db()
+        try:
+            if os.path.exists(self.file_path) and os.path.getsize(self.file_path) > 0:
+                with gzip.open(self.file_path, "rb") as databaseFile:
+                    self.activeDatabase = load(databaseFile)   
+                    databaseFile.close()
+            else:
+                self.activeDatabase = {
+                    "players" : [],
+                    "playerDiscriminators" : set()
+                }
+        except:
+            self.activeDatabase = {
+                    "players" : [],
+                    "playerDiscriminators" : set()
+                }
+            self.logger.error(f"Some error with saving in {self.name} database", exc_info=True)
 
     def savePlayers(self):
-        self._save_db()
+        """
+        Saves the database to file
+        """
+        try:
+            with gzip.open(self.file_path, "wb") as databaseFile:
+                dump(self.activeDatabase,databaseFile)   
+                databaseFile.close()
+        except:
+            self.logger.error(f"Some error with saving in {self.name} database", exc_info=True)
 

@@ -61,20 +61,19 @@ class startggInterface:
         return players
 
     def addEvents(self, eventsToAdd):
-        gotLock = False
-        logger.info("Trying to acquire lock")
-        with self.system.databaseLock:
-            logger.info("Adding events")
-            self.events.addEvents(eventsToAdd)
-            logger.info("Adding new entrants")
-            for i, tournament in enumerate(eventsToAdd):
-                try:
-                    players = self.entrantsToPlayers(tournament["mainEvent"]["entrants"])
-                    self.playerList.addPlayers(players)
-                except:
-                    logger.error(f"Error adding entrants to {tournament["link"]}", exc_info=True)
-            self.events.saveEvents()
-            self.playerList.savePlayers()
+        logger.info("Adding events")
+
+        self.events.addEvents(eventsToAdd)
+
+        logger.info("Adding new entrants")
+        for tournament in eventsToAdd:
+            try:
+                players = self.entrantsToPlayers(tournament["mainEvent"]["entrants"])
+                len(players)
+                self.playerList.addPlayers(players)
+            except:
+                logger.error(f"Error adding entrants to {tournament["link"]}", exc_info=True)
+
 
     def _getAllTournamentsQuery(self,after,before):
         """
@@ -170,32 +169,32 @@ class startggInterface:
         self.system.tracklistInfo = self.playerList.getPlayers(tracklist)
 
     def addEvent(self, slug):
+        with self.system.startggLock:
+            response = run_query(getTournamentEntrants, variables={"page" : 1, "slug" : slug}, header=self.header, auto_retry=True)
 
-        response = run_query(getTournamentEntrants, variables={"page" : 1, "slug" : slug}, header=self.header, auto_retry=True)
+            event = response["data"]["event"]
+            remainingPages = event["entrants"]["pageInfo"]["totalPages"]-1
 
-        event = response["data"]["event"]
-        remainingPages = event["entrants"]["pageInfo"]["totalPages"]-1
+            success, tournament = tournamentFilterNoMain(event["tournament"])
 
-        success, tournament = tournamentFilterNoMain(event["tournament"])
-
-        event = {
-            "id" : event["id"],
-            "name" : event["name"],
-            "state" : event["state"]
-        }
-        allEntrants = []
-        totalAttendees = 0
-        filteredEntrants, attendeeAmount = allEntrantsFilter(response, tournament["id"])
-        totalAttendees+=attendeeAmount
-        allEntrants.extend(filteredEntrants)
-
-        for i in range(remainingPages):
-
-            response = run_query(getTournamentEntrants, variables={"page" : 2+i, "slug" : slug}, header=self.header, auto_retry=True)
+            event = {
+                "id" : event["id"],
+                "name" : event["name"],
+                "state" : event["state"]
+            }
+            allEntrants = []
+            totalAttendees = 0
             filteredEntrants, attendeeAmount = allEntrantsFilter(response, tournament["id"])
             totalAttendees+=attendeeAmount
             allEntrants.extend(filteredEntrants)
-        self.system.st("Adding single event entrants")
+
+            for i in range(remainingPages):
+
+                response = run_query(getTournamentEntrants, variables={"page" : 2+i, "slug" : slug}, header=self.header, auto_retry=True)
+                filteredEntrants, attendeeAmount = allEntrantsFilter(response, tournament["id"])
+                totalAttendees+=attendeeAmount
+                allEntrants.extend(filteredEntrants)
+        self.system.queue.put(("status", "Adding single event entrants"))
         allEntrants.sort(key=lambda x: x["placement"])
         event["entrants"] = allEntrants
         tournament["mainEvent"] = event
@@ -207,16 +206,14 @@ class startggInterface:
         else:
             attendeeBonus = 0
         tournament["attendeeBonus"] = attendeeBonus
-        self.system.st("Ranking single event")
+        self.system.queue.put(("status","Ranking single event"))
         success, rankedTournament = tournamentTier(tournament, self.trackedPlayers.getTracklist())
-        allTournaments = self.system.tournamentsInfo
 
-        print(len(allTournaments))
-        self.events.addEvents([rankedTournament])
-        print(len(allTournaments))
-        allTournaments.sort(key=lambda x: x["startAt"])
-        print(len(allTournaments))
-        self.system.st("Single tournament added")
+        with self.system.databaseLock:
+            self.events.addEvents([rankedTournament])
+        
+        self.system.queue.put(("status","Single tournament added"))
+        self.system.queue.put(("addSingleEvent", None))
 
     def reRankTournaments(self):
         """
@@ -226,8 +223,8 @@ class startggInterface:
             try:
                 allTournaments = self.events.getEvents()
                 trackList = self.trackedPlayers.getTracklist()
-                ranked = self.rankTournamentTiers(allTournaments, trackList)
-                self.system._updateTournaments()
+                self.rankTournamentTiers(allTournaments, trackList)
+                self.system.queue.put(("reranked", None))
             except:
                 pass
 
@@ -315,7 +312,6 @@ class startggInterface:
         Get all event entrants
         Avoids predone events
         """
-        filledTournaments = []
         self.system.UI.status.set("Getting entrants...")
         tourneyNum = len(tournaments)
         i=1
@@ -335,20 +331,10 @@ class startggInterface:
             else:
                 attendeeBonus = 0
             tournament["attendeeBonus"] = attendeeBonus
-            filledTournaments.append(tournament)
-
-        return filledTournaments
-
-    
 
     def getTournaments(self, start, end):
         with self.system.startggLock:
-            self.system.tournamentsInfo = self._queryTournaments(start, end)
-
-        if t.main_thread().is_alive():
-            self.system._updateTournaments()
-        else:
-            self.save()
+            self._queryTournaments(start, end)
 
     def save(self):
         with self.system.databaseLock:
@@ -359,6 +345,27 @@ class startggInterface:
             logger.info("Tracked players")
             self.trackedPlayers.saveTracklist()
             logger.info("All saved up")
+
+    def toggleTopCut(self, playerDiscriminator, isTopCut):
+        with self.system.databaseLock:
+            self.playerList.toggleTopCut(playerDiscriminator, isTopCut)
+        self.system.queue.put(("status", "Toggled top cut"))
+
+    def toggleTournamentCounts(self, tournamentId, isCounting,):
+        with self.system.databaseLock:
+            self.events.toggleTournamentCounts(tournamentId, isCounting)
+        self.system.queue.put(("status", "Toggled tournament PR"))
+
+    def removeTrackedPlayer(self, discriminator):
+        with self.system.databaseLock:
+            self.trackedPlayers.removeTrackedPlayer(discriminator)
+        self.system.queue.put(("status", "Removed tracked player"))
+        self.system.queue.put(("removedTracked", None))
+
+    def updateTournamentTier(self, newTier : str, tournamentId):
+        with self.system.databaseLock:
+            self.events.updateTournamentTier(newTier, tournamentId)
+        self.system.queue.put(("status", "Changed tier"))
 
     def _queryTournaments(self, after, before):
         """
@@ -371,7 +378,8 @@ class startggInterface:
         if not self.events.isWithinTime(after, before):
             tournamentsToProcess = self._getAllTournamentsQuery(after, before)
             #this time has now been checked
-            self.events.addTime(after, before)
+            with self.system.databaseLock:
+                self.events.addTime(after, before)
         
 
         #get previous events ids
@@ -389,70 +397,69 @@ class startggInterface:
                 tournamentsToQuery.append(tournament)
         if not tournamentsToProcess == []:
             logger.info(f"How many tournaments to process: {len(tournamentsToQuery)}")
-            filled = self._fillEventEntrants(tournamentsToQuery, predoneEventIds)
-            ranked = self.rankTournamentTiers(filled, self.trackedPlayers.getTracklist())
+            self._fillEventEntrants(tournamentsToQuery, predoneEventIds)
+            self.rankTournamentTiers(tournamentsToQuery, self.trackedPlayers.getTracklist())
 
-            allTournaments.extend(ranked)
+            
         else:
-            self.system.UI.status.set("All tournaments found in storage")
+            self.system.queue.put(("status","All tournaments found in storage"))
             logger.info("All tournaments are stored")
-        if not ranked is None:
-            ranked.sort(key=lambda x: x["startAt"], reverse=True)
-
-            #self.addEvents(ranked)
-            t.Thread(target=lambda: self.addEvents(ranked)).start()
+        if not tournamentsToQuery is None:
+            tournamentsToQuery.sort(key=lambda x: x["startAt"], reverse=True)
+            print(len(tournamentsToQuery))
+            allTournaments.extend(tournamentsToQuery)
+            with self.system.databaseLock:
+                self.addEvents(tournamentsToQuery)
         allTournaments.sort(key=lambda x: x["startAt"])
         logger.info("Got all the tournaments o7")
-        return allTournaments
+        self.system.queue.put(("getTournaments",allTournaments))
     
+    def removeEvent(self, eventId):
+        with self.system.databaseLock:
+            self.events.removeEvent(eventId)
+        self.system.queue.put(("removedEvent", None))
+
     def fillEventSets(self, tournaments, tracklist):
-        filled = []
+        with self.system.databaseLock:
+            for tournament in tournaments:
+                entrantIds = [entrant["entrantId"] for entrant in tournament["mainEvent"]["entrants"] if entrant["discriminator"] in tracklist]
+                if not tournament["mainEvent"].get("sets") is None:
+                    continue
+                sets = self._querySets(tournament["mainEvent"]["id"], entrantIds)
+                prettySets = []
+                for set in sets:
+                    try:
+                        slots = set["slots"]
+                        #(slots)
+                        #print("getting winnerid")
+                        winnerId = (slots[0]["standing"]["placement"] == 1) and slots[0]["standing"]["entrant"]["id"] or slots[1]["standing"]["entrant"]["id"]
+                        #print("getting loserid")
+                        loserId = (slots[0]["standing"]["placement"] == 2) and slots[0]["standing"]["entrant"]["id"] or slots[1]["standing"]["entrant"]["id"]
+                        #print("winner")
+                        winner = self.playerList.getPlayerFromEntrant(winnerId)
+                        #print("loser")
+                        loser = self.playerList.getPlayerFromEntrant(loserId)
 
+                        prettySets.append({
+                            "winner" : winner,
+                            "loser" : loser
+                        })
+                    except:
+                        logger.error(f"Some unknwon edlritch error, filtering sets within {tournament["name"]}. \nLink: {tournament["link"]}")
+                tournament["mainEvent"]["sets"] = prettySets
 
-
-        for tournament in tournaments:
-            entrantIds = [entrant["entrantId"] for entrant in tournament["mainEvent"]["entrants"] if entrant["discriminator"] in tracklist]
-            if not tournament["mainEvent"].get("sets") is None:
-                filled.append(tournament)
-                continue
-            sets = self._querySets(tournament["mainEvent"]["id"], entrantIds)
-            prettySets = []
-            for set in sets:
-                try:
-                    slots = set["slots"]
-                    #(slots)
-                    #print("getting winnerid")
-                    winnerId = (slots[0]["standing"]["placement"] == 1) and slots[0]["standing"]["entrant"]["id"] or slots[1]["standing"]["entrant"]["id"]
-                    #print("getting loserid")
-                    loserId = (slots[0]["standing"]["placement"] == 2) and slots[0]["standing"]["entrant"]["id"] or slots[1]["standing"]["entrant"]["id"]
-                    #print("winner")
-                    winner = self.playerList.getPlayerFromEntrant(winnerId)
-                    #print("loser")
-                    loser = self.playerList.getPlayerFromEntrant(loserId)
-
-                    prettySets.append({
-                        "winner" : winner,
-                        "loser" : loser
-                    })
-                except:
-                    logger.error(f"Some unknwon edlritch error, filtering sets within {tournament["name"]}. \nLink: {tournament["link"]}")
-            tournament["mainEvent"]["sets"] = prettySets
-            filled.append(tournament)
-        return filled
 
 
     def rankTournamentTiers(self, tournaments, trackSet):
-        self.system.UI.status.set("Ranking tournaments...")
-        ranked= []
+        self.system.queue.put(("status","Ranking tournaments..."))
         tourneyNum = len(tournaments)
         i=1
         for tournament in tournaments:
-            self.system.st(f"Ranking tournaments {i} of {tourneyNum}...")
+            self.system.queue.put(("status",f"Ranking tournaments {i} of {tourneyNum}..."))
             i+=1
-            success, rankedTournament = tournamentTier(tournament, trackSet)
+            tournamentTier(tournament, trackSet)
 
-        self.system.st("Ranking finished")
-        return ranked
+        self.system.queue.put(("status","Ranking finished"))
 
 
     def _querySets(self, tournamentId, entrantIds):
@@ -513,10 +520,8 @@ def tournamentTier(tournament, trackSet):
             tournament["counting"] = False
         else:
             tournament["counting"] = True
-        return True, tournament
     except:
         logger.error(f"Unknown error with {tournament["name"]}", exc_info=True)
-        return False, None
 
 
 
