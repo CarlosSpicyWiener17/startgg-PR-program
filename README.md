@@ -1,4 +1,4 @@
-#Wiener PR Helper
+# Wiener PR Helper
 
 Just a simple program to get all tournaments in a geographic area,
 get its entrants, track notable players, and generate an xlsx file showing
@@ -20,8 +20,9 @@ Filtering based on TOs
 Full playerlist with searchable/filtering on approximate results
 
 **Usage**
-Ideally just run the code. I think .exe with pyinstaller doesn't work due to
-permissions
+You need a start.gg developer token in auth.txt in the same location as the .exe.
+You also need to make a folder in user Documents called "Wiener Exports"
+
 
 Contact me at discord: carlosspicywiener for any questions
 
