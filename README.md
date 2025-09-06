@@ -20,7 +20,7 @@ Filtering based on TOs
 Full playerlist with searchable/filtering on approximate results
 
 **Usage**
-You need a start.gg developer token in auth.txt in the same location as the .exe\n
+You need a start.gg developer token in auth.txt in the same location as the .exe.
 You also need to make a folder in user Documents called "Wiener Exports"
 
 
