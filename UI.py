@@ -216,11 +216,28 @@ class UI:
         addButton = ctk.CTkButton(master=addPlayerFrame, command=self._trackPlayer, text="Track player")
 
         #Layout
-        addPlayerFrame.grid(row=0, column=1, pady=7)
+        addPlayerFrame.grid(row=0, column=0, pady=7)
         entryField.grid(row=0, column=0)
         addButton.grid(row=0, column=2)
 
         addPlayerFrame.columnconfigure(1, minsize=40)
+
+    def _createTrackTab(self, parent):
+        mainPage = parent
+        
+        #Main frame
+        trackTab = ctk.CTkFrame(master=mainPage)
+
+        nameLabel = ctk.CTkLabel(master=trackTab, text="Name")
+        topCutLabel = ctk.CTkLabel(master=trackTab, text="Topcut?")       
+        nameLabel.grid(row=0, column=0, sticky="nswe")
+        topCutLabel.grid(row=0, column=2)
+        #Layout
+        trackTab.grid(row=1, column=0)
+
+        trackTab.columnconfigure(0, minsize=200)
+        trackTab.columnconfigure(1, minsize=200)
+        trackTab.columnconfigure(2, minsize=40)
 
 
     def _switchTab(self, tabName):
@@ -328,14 +345,17 @@ class UI:
 
     def createTracklist(self):
         trackedFrame = self.mainTabs["tabs"]["Tracked Players"]
-        trackedFrame.rowconfigure(0, weight=1)
+        trackedFrame.rowconfigure(0, weight=0)
+        trackedFrame.rowconfigure(1, weight=0)
+        trackedFrame.rowconfigure(2, weight=1)
         trackedFrame.columnconfigure(0, weight=1)
         trackedPlayers = self.system.tracklistInfo
         for widget in trackedFrame.winfo_children():
             widget.destroy()
 
         scrollbar = ctk.CTkScrollableFrame(master=trackedFrame)
-        self._createTrackPlayers(scrollbar)
+        self._createTrackPlayers(trackedFrame)
+        self._createTrackTab(trackedFrame)
         for i, player in enumerate(trackedPlayers):
             #print("creating a frame")
             masterFrame = ctk.CTkFrame(master=scrollbar)
@@ -353,13 +373,13 @@ class UI:
             topCutCheck.grid(row=0, column=0, sticky="nswe")
             
             topCutFrame.grid(row=0, column=2, sticky="nswe")
-            masterFrame.grid(row=i+1, column=1, sticky="nswe", padx=2, pady=2)
+            masterFrame.grid(row=i+2, column=1, sticky="nswe", padx=2, pady=2)
 
         scrollbar.columnconfigure(0, minsize=10, weight=1)
         scrollbar.columnconfigure(1, weight=0, minsize=400)
         scrollbar.columnconfigure(2, minsize=10, weight=1)
 
-        scrollbar.grid(row=0, column = 0, sticky = "nswe")
+        scrollbar.grid(row=2, column = 0, sticky = "nswe")
 
 
 

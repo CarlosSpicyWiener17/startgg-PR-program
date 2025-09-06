@@ -236,8 +236,16 @@ class Exporter:
         contenderNum = len(tracklist)
         self.competitors = self.system.getCompetitors()
         self.competitors = self.sortCompetitors()
+        self.topCutDiscriminators = {comp["discriminator"] for comp in self.competitors if comp["topCut"]}
+        topCut = {
+            "name" : "topcut",
+            "wins" : dict(),
+            "losses" : dict()
+        }
+
         for i, competitor in enumerate(self.competitors):
             try:
+
                 self.system.queue.put(("status",f"Creating Season {self.number} Contenders. {i+1} of {contenderNum}"))
                 if competitor["tournaments"] is None or competitor["tournaments"] == []:
                     continue
@@ -254,6 +262,8 @@ class Exporter:
                     tform = workbook.add_format(tform)
                     tourneyForm = workbook.add_format(tourneyFormats[result["tournament"]["eventTier"]])
                     placementName = ""
+
+                    #Find placement of current competitor in tournament entrants
                     for entrant in result["tournament"]["mainEvent"]["entrants"]:
                         if entrant["id"] == competitor["id"]:
                             placementName = addSuffix(entrant["placement"])
@@ -267,7 +277,13 @@ class Exporter:
                     winLen = len(result["wins"].keys())
                     currentI=1
                     Wins = ""
+                    
                     for discriminator, winAmount in result["wins"].items():
+                        if competitor["topCut"] and discriminator not in self.topCutDiscriminators:
+                            if topCut["wins"].get(discriminator) is None:
+                                topCut["wins"][discriminator] = winAmount
+                            else:
+                                topCut["wins"][discriminator] += winAmount
                         name = self.system.getPlayer(discriminator)["name"]
                         Wins+=name
                         if winAmount != 1:
@@ -283,6 +299,11 @@ class Exporter:
                     lossLen = len(result["losses"].keys())
                     currentI = 1
                     for discriminator, lossAmount in result["losses"].items():
+                        if competitor["topCut"] and discriminator not in self.topCutDiscriminators:
+                            if topCut["losses"].get(discriminator) is None:
+                                topCut["losses"][discriminator] = lossAmount
+                            else:
+                                topCut["losses"][discriminator] += lossAmount
                         name = self.system.getPlayer(discriminator)["name"]
                         Losses+=name
                         if not lossAmount == 1:
@@ -302,6 +323,7 @@ class Exporter:
                 self.system.queue.put(("status",f"Some error with contender {competitor["name"]}"))
                 sleep(3)
         self.competitors = self.system.getCompetitors()
+        self.topCut = topCut
         return True
 
     def sortCompetitors(self):
@@ -338,17 +360,35 @@ class Exporter:
         workbook = self.workbook
         tracksheet = workbook.add_worksheet(f"S'{self.number} H2H")
         blacked = workbook.add_format({"bg_color" : Color("#000000")})
-        for i, competitor in enumerate(self.competitors):
+        i = 0
+        for competitor in self.competitors:
             try:
+                
+                if competitor["topCut"]:
+                    continue
                 tracksheet.write(0, i+1, competitor["name"])
                 tracksheet.write(i+1, 0, competitor["name"])
-                for j, competitor2 in enumerate(self.competitors):
+
+                j=0
+                for competitor2 in self.competitors:
+                    if competitor2["topCut"] == True:
+                        continue
                     if i==j:
                         tracksheet.write(i+1, j+1, "", blacked)
                     else:
                         msg = ""
                         msg+=str(competitor["setWins"].get(competitor2["discriminator"],0)) + "-" + str(competitor["setLosses"].get(competitor2["discriminator"],0))
                         tracksheet.write(i+1, j+1, msg)
+                    j+=1
+                msg=""
+                msg+=str(self.topCut["losses"].get(competitor["discriminator"],0))
+                msg+="-"
+                msg+=str(self.topCut["wins"].get(competitor["discriminator"],0))
+                tracksheet.write(i+1, j+1, msg)
+                i +=1
+                
             except:
                 self.system.queue.put(("status",f"Unknown error with {competitor["name"]}"))
+                sleep(1)
+        tracksheet.write(0, i+1, "topcut")
         pass
