@@ -1,4 +1,4 @@
-#Wiener PR Helper
+# Wiener PR Helper
 
 Just a simple program to get all tournaments in a geographic area,
 get its entrants, track notable players, and generate an xlsx file showing
